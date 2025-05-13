@@ -1,0 +1,22 @@
+---------------------------- PROCESS STARTED (32080) for package com.toni.dicerollerapp ----------------------------
+--------- beginning of main
+2025-05-12 21:48:05.617 29208-29359 BillingDebug            pid-29208                            D  🔗 Billing setup finished. Starting product query.
+2025-05-12 21:48:05.617 29208-29359 BillingDebug            pid-29208                            D  🛒 Querying product IDs: [dice_d2_coin, dice_d2_wooden, dice_d2_moon, dice_d4_galaxy, dice_d6_coin, dice_d6_wooden, dice_d6_rainbow, dice_d6_galaxy, dice_d12_rainbow, dice_d6_white, dice_d6_black, bg_gold, bg_wood, bg_rainbow, bg_galaxy, bundle_gold, bundle_wooden, bundle_galaxy, bundle_rainbow, premium_access]
+2025-05-12 21:48:05.617 29208-29359 BillingDebug            pid-29208                            D  ⚙️ BillingClient is ready: true
+2025-05-12 21:48:05.755 29208-29208 BillingDebug            pid-29208                            D  🛒 Querying product IDs: [dice_d2_coin, dice_d2_wooded, dice_d2_moon, dice_d4_galaxy, dice_d6_coin, dice_d6_wooden, dice_d6_rainbow, dice_d6_galaxy, dice_d12_rainbow, dice_d6_white, dice_d6_black, bg_gold, bg_wood, bg_rainbow, bg_galaxy, bundle_gold, bundle_wooden, bundle_galaxy, bundle_rainbow, premium_access]
+2025-05-12 21:48:05.755 29208-29208 BillingDebug            pid-29208                            D  ⚙️ BillingClient is ready: true
+2025-05-12 21:48:07.587 29208-29365 BillingDebug            pid-29208                            D  📦 Billing result code: 0 ()
+2025-05-12 21:48:07.587 29208-29365 BillingDebug            pid-29208                            D  ✅ Received 0 product(s) from Google
+2025-05-12 21:48:07.587 29208-29391 BillingDebug            pid-29208                            D  📦 Billing result code: 0 ()
+2025-05-12 21:48:07.587 29208-29391 BillingDebug            pid-29208                            D  ✅ Received 0 product(s) from Google
+2025-05-12 21:48:07.587 29208-29365 BillingDebug            pid-29208                            D  🟩 Product details map contains 0 entries
+2025-05-12 21:49:41.785 32080-32080 BillingDebug            com.toni.dicerollerapp               D  🛒 Querying product IDs: [dice_d2_coin, dice_d2_wooden, dice_d2_moon, dice_d4_galaxy, dice_d6_coin, dice_d6_wooden, dice_d6_rainbow, dice_d6_galaxy, dice_d12_rainbow, bg_gold, bg_wood, bg_rainbow, bg_galaxy, bundle_gold, bundle_wooden, bundle_galaxy, bundle_rainbow, premium_access]
+2025-05-12 21:49:41.785 32080-32080 BillingDebug            com.toni.dicerollerapp               D  ⚙️ BillingClient is ready: false
+2025-05-12 21:49:41.787 32080-32080 BillingDebug            com.toni.dicerollerapp               D  📦 Billing result code: -1 (Service connection is disconnected.)
+2025-05-12 21:49:41.787 32080-32080 BillingDebug            com.toni.dicerollerapp               D  ✅ Received 0 product(s) from Google
+2025-05-12 21:49:41.800 32080-32178 BillingDebug            com.toni.dicerollerapp               D  🔗 Billing setup finished. Starting product query.
+2025-05-12 21:49:41.801 32080-32178 BillingDebug            com.toni.dicerollerapp               D  🛒 Querying product IDs: [dice_d2_coin, dice_d2_wooden, dice_d2_moon, dice_d4_galaxy, dice_d6_coin, dice_d6_wooden, dice_d6_rainbow, dice_d6_galaxy, dice_d12_rainbow, bg_gold, bg_wood, bg_rainbow, bg_galaxy, bundle_gold, bundle_wooden, bundle_galaxy, bundle_rainbow, premium_access]
+2025-05-12 21:49:41.801 32080-32178 BillingDebug            com.toni.dicerollerapp               D  ⚙️ BillingClient is ready: true
+2025-05-12 21:49:41.841 32080-32182 BillingDebug            com.toni.dicerollerapp               D  📦 Billing result code: 0 ()
+2025-05-12 21:49:41.841 32080-32182 BillingDebug            com.toni.dicerollerapp               D  ✅ Received 0 product(s) from Google
+2025-05-12 21:49:41.841 32080-32182 BillingDebug            com.toni.dicerollerapp               D  🟩 Product details map contains 0 entries

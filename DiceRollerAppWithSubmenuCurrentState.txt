@@ -1,0 +1,765 @@
+
+package com.example.dicerollerapp
+
+import android.os.Bundle
+import android.media.MediaPlayer
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import com.example.dicerollerapp.ui.theme.DiceRollerAppTheme
+import kotlinx.coroutines.delay
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.foundation.clickable
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.content.Context
+import android.os.Build
+import androidx.compose.runtime.saveable.rememberSaveable
+
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            DiceRollerAppTheme {
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    DiceRollerScreen(modifier = Modifier.padding(innerPadding))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceRollerScreen(modifier: Modifier = Modifier) {
+    val isSoundEnabled = rememberSaveable { mutableStateOf(true) }
+    val isVibrationEnabled = rememberSaveable { mutableStateOf(true) }
+    val context = LocalContext.current
+    val diceCount = remember { mutableStateOf(5) }
+    val diceResults = remember { mutableStateListOf<Int>() }
+    val totalSum = remember { mutableStateOf(0) }
+    var isRolling by remember { mutableStateOf(false) }
+    var showDiceRangeMenu by remember { mutableStateOf(false) } // Track if menu is open
+    var selectedDiceType by rememberSaveable { mutableStateOf(6) } // Default d6
+
+
+    // 🎵 Select the correct sound file based on dice count
+    val rollSoundResId = when {
+        diceCount.value == 1 -> R.raw.one_die_throw
+        diceCount.value in 2..3 -> R.raw.two_three_dice_throw
+        else -> R.raw.four_six_dice_throw
+    }
+
+    var rollSound by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    LaunchedEffect(rollSoundResId) {
+        rollSound?.release()
+        rollSound = MediaPlayer.create(context, rollSoundResId)
+    }
+
+    val adjustedSoundDuration = when (diceCount.value) {
+        1 -> rollSound?.duration?.toLong()?.plus(100) ?: 3000L
+        in 2..3 -> rollSound?.duration?.toLong()?.plus(200) ?: 3500L
+        else -> rollSound?.duration?.toLong()?.plus(300) ?: 4500L
+    }
+
+    LaunchedEffect(Unit) {
+        repeat(diceCount.value) { diceResults.add((1..6).random()) }
+        totalSum.value = diceResults.sum()
+    }
+    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+
+    LaunchedEffect(isRolling) {
+        if (isRolling) {
+            if (isSoundEnabled.value) {
+                rollSound?.seekTo(0)
+                rollSound?.start()
+            }
+
+            val changeInterval = 100L
+            val totalChanges = (adjustedSoundDuration / changeInterval).toInt()
+
+            repeat(totalChanges) {
+                for (i in diceResults.indices) {
+                    diceResults[i] = (1..6).random()
+                }
+
+                if (isVibrationEnabled.value) {
+                    vibrator?.let {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            it.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE)) // Shorter burst
+                        } else {
+                            @Suppress("DEPRECATION")
+                            it.vibrate(30) // Shorter burst
+                        }
+                    }
+                }
+
+                delay(changeInterval)
+            }
+
+            vibrator?.cancel() // Stop vibration at the end
+            for (i in diceResults.indices) {
+                diceResults[i] = (1..6).random()
+            }
+            totalSum.value = diceResults.sum()
+            isRolling = false
+        }
+    }
+
+
+    // 🎛️ Bottom Sheet State
+    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showBottomSheet by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = modifier.fillMaxSize().background(Color.Black).padding(16.dp)
+    ) {
+        Text(
+            text = "Number of Dice: ${diceCount.value}",
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp)
+        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(diceResults.size) { index ->
+                    val diceResult = diceResults[index]
+                    Image(
+                        painter = painterResource(id = getDiceImage(diceResult)),
+                        contentDescription = "Dice",
+                        modifier = Modifier.size(80.dp).padding(8.dp)
+                    )
+                }
+            }
+
+            if (!isRolling) {
+                Text(
+                    text = "Total: ${totalSum.value}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            IconButton(onClick = { isRolling = true }) {
+                Image(
+                    painter = painterResource(id = R.drawable.dicerollerbutton),
+                    contentDescription = "Roll All Dice",
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+
+            IconButton(onClick = {
+                if (diceCount.value < 6) {
+                    diceCount.value++
+                    diceResults.add((1..6).random())
+                    totalSum.value = diceResults.sum()
+                }
+            }) {
+                Icon(imageVector = Icons.Filled.Add, contentDescription = "Increase Dice", tint = Color.White)
+            }
+
+            IconButton(onClick = {
+                if (diceCount.value > 1) {
+                    diceCount.value--
+                    if (diceResults.isNotEmpty()) {
+                        diceResults.removeAt(diceResults.lastIndex)
+                        totalSum.value = diceResults.sum()
+                    }
+                }
+            }) {
+                Icon(imageVector = Icons.Filled.Remove, contentDescription = "Decrease Dice", tint = Color.White)
+            }
+
+            // Open Bottom Sheet on Click
+            IconButton(onClick = { showBottomSheet = true }) {
+                Icon(imageVector = Icons.Filled.Settings, contentDescription = "Settings", tint = Color.White)
+            }
+        }
+    }
+
+    // 🎛️ Bottom Sheet Content (EMPTY FOR NOW)
+    if (showBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showBottomSheet = false },
+            sheetState = bottomSheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = "⚙️ Dice Settings", style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 🔹 Vibration Toggle Setting
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = R.drawable.vibration_on_off),
+                            contentDescription = "Vibration Toggle",
+                            modifier = Modifier.size(40.dp) // Adjust icon size
+                        )
+                    },
+                    headlineContent = { Text("Vibration") },
+                    trailingContent = {
+                        Switch(
+                            checked = isVibrationEnabled.value,
+                            onCheckedChange = { isVibrationEnabled.value = it }
+                        )
+                    }
+                )
+
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = R.drawable.sound_on_off), // Your Sound Icon
+                            contentDescription = "Sound Toggle",
+                            modifier = Modifier.size(40.dp) // Adjust icon size
+                        )
+                    },
+                    headlineContent = { Text("Sound") },
+                    trailingContent = {
+                        Switch(
+                            checked = isSoundEnabled.value,
+                            onCheckedChange = { isSoundEnabled.value = it }
+                        )
+                    }
+                )
+
+
+                // 🔹 Dice Range Setting (FIXED)
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = getDiceIcon(LocalContext.current, selectedDiceType)),
+                            contentDescription = "Dice d$selectedDiceType",
+                            modifier = Modifier.size(40.dp) // Adjust icon size
+                        )
+                    },
+                    headlineContent = { Text("Dice Range: d$selectedDiceType") }, // Show selected dice type
+                    trailingContent = {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowRight,
+
+                            contentDescription = "Open Dice Range Settings"
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showDiceRangeMenu = true // Open submenu when clicked
+                    }
+                )
+
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = { showBottomSheet = false }) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+    if (showDiceRangeMenu) {
+        DiceRangeMenu(
+            availableDiceTypes = listOf(2, 4, 6, 8, 10, 12, 20), // Available dice types
+            selectedDiceType = selectedDiceType,
+            onDiceSelected = { newDiceType ->
+                selectedDiceType = newDiceType // Update selected dice
+            },
+            onDismiss = { showDiceRangeMenu = false } // Close menu
+        )
+    }
+
+}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceRangeMenu(
+    availableDiceTypes: List<Int>,
+    selectedDiceType: Int,
+    onDiceSelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current // Get context for resources
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = "🎲 Select Dice Type", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            availableDiceTypes.forEach { diceType ->
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = getDiceIcon(context, diceType)),
+                            contentDescription = "Dice d$diceType",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                    headlineContent = { Text("d$diceType") },
+                    modifier = Modifier.clickable {
+                        onDiceSelected(diceType)
+                        onDismiss() // Close menu after selecting
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    }
+}
+
+// 🎲 Fix getDiceImage() for Dynamic Ranges
+fun getDiceImage(diceResult: Int): Int {
+    return when (diceResult) {
+        1 -> R.drawable.dice1
+        2 -> R.drawable.dice2
+        3 -> R.drawable.dice3
+        4 -> R.drawable.dice4
+        5 -> R.drawable.dice5
+        6 -> R.drawable.dice6
+        else -> R.drawable.dice1
+    }
+}
+fun getDiceIcon(context: Context, diceType: Int): Int {
+    val resourceName = "dice_d${diceType}_icon" // Example: dice_d6_icon
+    val resId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
+    return if (resId != 0) resId else R.drawable.dice_d6_icon // Default icon
+}
+
+@Preview(showBackground = true)
+@Composable
+fun DefaultPreview() {
+    DiceRollerAppTheme {
+        DiceRollerScreen(modifier = Modifier)
+    }
+}
+--------------------------------------------------------------------------
+
+package com.example.dicerollerapp
+
+import android.os.Bundle
+import android.media.MediaPlayer
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import com.example.dicerollerapp.ui.theme.DiceRollerAppTheme
+import kotlinx.coroutines.delay
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.foundation.clickable
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.content.Context
+import android.os.Build
+import androidx.compose.runtime.saveable.rememberSaveable
+
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            DiceRollerAppTheme {
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    DiceRollerScreen(modifier = Modifier.padding(innerPadding))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceRollerScreen(modifier: Modifier = Modifier) {
+    val isSoundEnabled = rememberSaveable { mutableStateOf(true) }
+    val isVibrationEnabled = rememberSaveable { mutableStateOf(true) }
+    val context = LocalContext.current
+    val diceCount = remember { mutableStateOf(5) }
+    val diceResults = remember { mutableStateListOf<Int>() }
+    val totalSum = remember { mutableStateOf(0) }
+    var isRolling by remember { mutableStateOf(false) }
+    var showDiceRangeMenu by remember { mutableStateOf(false) } // Track if menu is open
+    var selectedDiceType by rememberSaveable { mutableStateOf(6) } // Default d6
+
+
+    // 🎵 Select the correct sound file based on dice count
+    val rollSoundResId = when {
+        diceCount.value == 1 -> R.raw.one_die_throw
+        diceCount.value in 2..3 -> R.raw.two_three_dice_throw
+        else -> R.raw.four_six_dice_throw
+    }
+
+    var rollSound by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    LaunchedEffect(rollSoundResId) {
+        rollSound?.release()
+        rollSound = MediaPlayer.create(context, rollSoundResId)
+    }
+
+    val adjustedSoundDuration = when (diceCount.value) {
+        1 -> rollSound?.duration?.toLong()?.plus(100) ?: 3000L
+        in 2..3 -> rollSound?.duration?.toLong()?.plus(200) ?: 3500L
+        else -> rollSound?.duration?.toLong()?.plus(300) ?: 4500L
+    }
+
+    LaunchedEffect(Unit) {
+        repeat(diceCount.value) { diceResults.add((1..6).random()) }
+        totalSum.value = diceResults.sum()
+    }
+    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+
+    LaunchedEffect(isRolling) {
+        if (isRolling) {
+            if (isSoundEnabled.value) {
+                rollSound?.seekTo(0)
+                rollSound?.start()
+            }
+
+            val changeInterval = 100L
+            val totalChanges = (adjustedSoundDuration / changeInterval).toInt()
+
+            repeat(totalChanges) {
+                for (i in diceResults.indices) {
+                    diceResults[i] = (1..6).random()
+                }
+
+                if (isVibrationEnabled.value) {
+                    vibrator?.let {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            it.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE)) // Shorter burst
+                        } else {
+                            @Suppress("DEPRECATION")
+                            it.vibrate(30) // Shorter burst
+                        }
+                    }
+                }
+
+                delay(changeInterval)
+            }
+
+            vibrator?.cancel() // Stop vibration at the end
+            for (i in diceResults.indices) {
+                diceResults[i] = (1..6).random()
+            }
+            totalSum.value = diceResults.sum()
+            isRolling = false
+        }
+    }
+
+
+    // 🎛️ Bottom Sheet State
+    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showBottomSheet by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = modifier.fillMaxSize().background(Color.Black).padding(16.dp)
+    ) {
+        Text(
+            text = "Number of Dice: ${diceCount.value}",
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp)
+        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(diceResults.size) { index ->
+                    val diceResult = diceResults[index]
+                    Image(
+                        painter = painterResource(id = getDiceImage(diceResult)),
+                        contentDescription = "Dice",
+                        modifier = Modifier.size(80.dp).padding(8.dp)
+                    )
+                }
+            }
+
+            if (!isRolling) {
+                Text(
+                    text = "Total: ${totalSum.value}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            IconButton(onClick = { isRolling = true }) {
+                Image(
+                    painter = painterResource(id = R.drawable.dicerollerbutton),
+                    contentDescription = "Roll All Dice",
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+
+            IconButton(onClick = {
+                if (diceCount.value < 6) {
+                    diceCount.value++
+                    diceResults.add((1..6).random())
+                    totalSum.value = diceResults.sum()
+                }
+            }) {
+                Icon(imageVector = Icons.Filled.Add, contentDescription = "Increase Dice", tint = Color.White)
+            }
+
+            IconButton(onClick = {
+                if (diceCount.value > 1) {
+                    diceCount.value--
+                    if (diceResults.isNotEmpty()) {
+                        diceResults.removeAt(diceResults.lastIndex)
+                        totalSum.value = diceResults.sum()
+                    }
+                }
+            }) {
+                Icon(imageVector = Icons.Filled.Remove, contentDescription = "Decrease Dice", tint = Color.White)
+            }
+
+            // Open Bottom Sheet on Click
+            IconButton(onClick = { showBottomSheet = true }) {
+                Icon(imageVector = Icons.Filled.Settings, contentDescription = "Settings", tint = Color.White)
+            }
+        }
+    }
+
+    // 🎛️ Bottom Sheet Content (EMPTY FOR NOW)
+    if (showBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showBottomSheet = false },
+            sheetState = bottomSheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = "⚙️ Dice Settings", style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 🔹 Vibration Toggle Setting
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = R.drawable.vibration_on_off),
+                            contentDescription = "Vibration Toggle",
+                            modifier = Modifier.size(40.dp) // Adjust icon size
+                        )
+                    },
+                    headlineContent = { Text("Vibration") },
+                    trailingContent = {
+                        Switch(
+                            checked = isVibrationEnabled.value,
+                            onCheckedChange = { isVibrationEnabled.value = it }
+                        )
+                    }
+                )
+
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = R.drawable.sound_on_off), // Your Sound Icon
+                            contentDescription = "Sound Toggle",
+                            modifier = Modifier.size(40.dp) // Adjust icon size
+                        )
+                    },
+                    headlineContent = { Text("Sound") },
+                    trailingContent = {
+                        Switch(
+                            checked = isSoundEnabled.value,
+                            onCheckedChange = { isSoundEnabled.value = it }
+                        )
+                    }
+                )
+
+
+                // 🔹 Dice Range Setting (FIXED)
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = getDiceIcon(LocalContext.current, selectedDiceType)),
+                            contentDescription = "Dice d$selectedDiceType",
+                            modifier = Modifier.size(40.dp) // Adjust icon size
+                        )
+                    },
+                    headlineContent = { Text("Dice Range: d$selectedDiceType") }, // Show selected dice type
+                    trailingContent = {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowRight,
+
+                            contentDescription = "Open Dice Range Settings"
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showDiceRangeMenu = true // Open submenu when clicked
+                    }
+                )
+
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = { showBottomSheet = false }) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+    if (showDiceRangeMenu) {
+        DiceRangeMenu(
+            availableDiceTypes = listOf(2, 4, 6, 8, 10, 12, 20), // Available dice types
+            selectedDiceType = selectedDiceType,
+            onDiceSelected = { newDiceType ->
+                selectedDiceType = newDiceType // Update selected dice
+            },
+            onDismiss = { showDiceRangeMenu = false } // Close menu
+        )
+    }
+
+}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceRangeMenu(
+    availableDiceTypes: List<Int>,
+    selectedDiceType: Int,
+    onDiceSelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current // Get context for resources
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = "🎲 Select Dice Type", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            availableDiceTypes.forEach { diceType ->
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = getDiceIcon(context, diceType)),
+                            contentDescription = "Dice d$diceType",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                    headlineContent = { Text("d$diceType") },
+                    modifier = Modifier.clickable {
+                        onDiceSelected(diceType)
+                        onDismiss() // Close menu after selecting
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    }
+}
+
+// 🎲 Fix getDiceImage() for Dynamic Ranges
+fun getDiceImage(diceResult: Int): Int {
+    return when (diceResult) {
+        1 -> R.drawable.dice1
+        2 -> R.drawable.dice2
+        3 -> R.drawable.dice3
+        4 -> R.drawable.dice4
+        5 -> R.drawable.dice5
+        6 -> R.drawable.dice6
+        else -> R.drawable.dice1
+    }
+}
+fun getDiceIcon(context: Context, diceType: Int): Int {
+    val resourceName = "dice_d${diceType}_icon" // Example: dice_d6_icon
+    val resId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
+    return if (resId != 0) resId else R.drawable.dice_d6_icon // Default icon
+}
+
+@Preview(showBackground = true)
+@Composable
+fun DefaultPreview() {
+    DiceRollerAppTheme {
+        DiceRollerScreen(modifier = Modifier)
+    }
+}

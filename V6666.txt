@@ -1,0 +1,859 @@
+package com.example.dicerollerapp
+
+import androidx.compose.ui.layout.ContentScale
+import android.os.Bundle
+import android.media.MediaPlayer
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import com.example.dicerollerapp.ui.theme.DiceRollerAppTheme
+import kotlinx.coroutines.delay
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.foundation.clickable
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.content.Context
+import android.os.Build
+import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.border
+
+
+
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            DiceRollerAppTheme {
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    DiceRollerScreen(modifier = Modifier.padding(innerPadding))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceRollerScreen(modifier: Modifier = Modifier) {
+    val isSoundEnabled = rememberSaveable { mutableStateOf(true) }
+    val isVibrationEnabled = rememberSaveable { mutableStateOf(true) }
+    val context = LocalContext.current
+    val diceCount = remember { mutableStateOf(5) }
+    val diceResults = remember { mutableStateListOf<Int>() }
+    val totalSum = remember { mutableStateOf(0) }
+    var isRolling by remember { mutableStateOf(false) }
+    val menuStack = remember { mutableStateListOf("main") } // ✅ Track menu navigation
+    val selectedSkins = remember { mutableStateMapOf<Int, Int>() } // ✅ Store selected skins
+    val coroutineScope = rememberCoroutineScope()
+    var showSettings by remember { mutableStateOf(false) }
+    var selectedDiceType by rememberSaveable { mutableStateOf(6) }
+    var selectedSubMenuDiceType by remember { mutableStateOf(6) }
+    //var selectedDiceType by rememberSaveable { mutableStateOf(6) } // Default d6
+    val selectedBackground = rememberSaveable { mutableStateOf(R.drawable.bg_black) } // Default background
+
+
+
+    // 🎵 Select the correct sound file based on dice count
+    val rollSoundResId = when {
+        diceCount.value == 1 -> R.raw.one_die_throw
+        diceCount.value in 2..3 -> R.raw.two_three_dice_throw
+        else -> R.raw.four_six_dice_throw
+    }
+
+    var rollSound by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    LaunchedEffect(rollSoundResId) {
+        rollSound?.release()
+        rollSound = MediaPlayer.create(context, rollSoundResId)
+    }
+
+    val adjustedSoundDuration = when (diceCount.value) {
+        1 -> rollSound?.duration?.toLong()?.plus(100) ?: 3000L
+        in 2..3 -> rollSound?.duration?.toLong()?.plus(200) ?: 3500L
+        else -> rollSound?.duration?.toLong()?.plus(300) ?: 4500L
+    }
+
+    LaunchedEffect(Unit) {
+        repeat(diceCount.value) { diceResults.add((1..6).random()) }
+        totalSum.value = diceResults.sum()
+    }
+    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+
+    LaunchedEffect(isRolling) {
+        if (isRolling) {
+            if (isSoundEnabled.value) {
+                rollSound?.seekTo(0)
+                rollSound?.start()
+            }
+
+            val changeInterval = 100L
+            val totalChanges = (adjustedSoundDuration / changeInterval).toInt()
+
+            repeat(totalChanges) {
+                for (i in diceResults.indices) {
+                    diceResults[i] = (1..6).random()
+                }
+
+                if (isVibrationEnabled.value) {
+                    vibrator?.let {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            it.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE)) // Shorter burst
+                        } else {
+                            @Suppress("DEPRECATION")
+                            it.vibrate(30) // Shorter burst
+                        }
+                    }
+                }
+
+                delay(changeInterval)
+            }
+
+            vibrator?.cancel() // Stop vibration at the end
+            for (i in diceResults.indices) {
+                diceResults[i] = (1..6).random()
+            }
+            totalSum.value = diceResults.sum()
+            isRolling = false
+        }
+    }
+
+
+    // 🎛️ Bottom Sheet State
+    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showBottomSheet by remember { mutableStateOf(false) }
+
+    Box(
+
+        modifier = Modifier.fillMaxSize()
+
+    )
+    {
+        Image(
+            painter = painterResource(id = selectedBackground.value),
+            contentDescription = "Background",
+            modifier = Modifier.fillMaxSize(), // ✅ Stretch full screen
+            contentScale = ContentScale.Crop // ✅ Fills entire area, no gaps!
+        )
+
+
+        Text(
+            text = "Number of Dice: ${diceCount.value}",
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 60.dp) // 🔥 Increase this value to move it lower
+                .wrapContentWidth(Alignment.CenterHorizontally)
+        )
+
+
+
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(diceResults.size) { index ->
+                    val diceResult = diceResults[index]
+                    Image(
+                        painter = painterResource(id = getDiceImage(diceResult)),
+                        contentDescription = "Dice",
+                        modifier = Modifier.size(80.dp).padding(8.dp)
+                    )
+                }
+            }
+
+            if (!isRolling) {
+                Text(
+                    text = "Total: ${totalSum.value}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            IconButton(onClick = { isRolling = true }) {
+                Image(
+                    painter = painterResource(id = R.drawable.dicerollerbutton_no_bg),
+                    contentDescription = "Roll All Dice",
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+
+            IconButton(onClick = {
+                if (diceCount.value < 6) {
+                    diceCount.value++
+                    diceResults.add((1..6).random())
+                    totalSum.value = diceResults.sum()
+                }
+            }) {
+                Icon(imageVector = Icons.Filled.Add, contentDescription = "Increase Dice", tint = Color.White)
+            }
+
+            IconButton(onClick = {
+                if (diceCount.value > 1) {
+                    diceCount.value--
+                    if (diceResults.isNotEmpty()) {
+                        diceResults.removeAt(diceResults.lastIndex)
+                        totalSum.value = diceResults.sum()
+                    }
+                }
+            }) {
+                Icon(imageVector = Icons.Filled.Remove, contentDescription = "Decrease Dice", tint = Color.White)
+            }
+
+            // Open Bottom Sheet on Click
+            IconButton(onClick = { showSettings = true }) {
+                Icon(imageVector = Icons.Filled.Settings, contentDescription = "Settings", tint = Color.White)
+            }
+
+
+        }
+    }
+
+    // 🎛️ Bottom Sheet Content (EMPTY FOR NOW)
+    if (showSettings) {
+        ModalBottomSheet(
+            onDismissRequest = { showSettings = false }
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = "⚙️ Dice Settings", style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                ListItem(
+                    leadingContent = { Image(painter = painterResource(id = R.drawable.vibration_on_off), contentDescription = "Vibration Toggle", modifier = Modifier.size(40.dp)) },
+                    headlineContent = { Text("Vibration") },
+                    trailingContent = {
+                        Switch(checked = isVibrationEnabled.value, onCheckedChange = { isVibrationEnabled.value = it })
+                    }
+                )
+
+                ListItem(
+                    leadingContent = { Image(painter = painterResource(id = R.drawable.sound_on_off), contentDescription = "Sound Toggle", modifier = Modifier.size(40.dp)) },
+                    headlineContent = { Text("Sound") },
+                    trailingContent = {
+                        Switch(checked = isSoundEnabled.value, onCheckedChange = { isSoundEnabled.value = it })
+                    }
+                )
+
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = getDiceIcon(LocalContext.current, selectedDiceType)),
+                            contentDescription = "Dice d$selectedDiceType",
+                            modifier = Modifier.size(40.dp) // Adjust icon size
+                        )
+                    },
+                    headlineContent = { Text("Dice Range: d$selectedDiceType") }, // Show selected dice type
+                    trailingContent = {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowRight,
+                            contentDescription = "Open Dice Range Settings"
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showSettings = false // Close settings menu first
+                        menuStack.add("range") // ✅ Open Dice Type selection
+                    }
+                )
+
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = R.drawable.bg_icon), // ✅ Your background icon
+                            contentDescription = "Background Selection",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                    headlineContent = { Text("Background") },
+                    trailingContent = {
+                        Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = "Open Background Selection")
+                    },
+                    modifier = Modifier.clickable {
+                        showSettings = false // Close settings first
+                        menuStack.add("backgroundSelection") // ✅ Open Background Selection
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = { showSettings = false }) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+
+
+    if (menuStack.last() == "range") {
+        DiceRangeMenu(
+            availableDiceTypes = listOf(2, 4, 6, 8, 10, 12, 20),
+            selectedDiceType = selectedDiceType,
+            selectedSubMenuDiceType = selectedSubMenuDiceType,
+            menuStack = menuStack,
+            onDiceSelected = { newDiceType ->
+                selectedSubMenuDiceType = newDiceType
+                menuStack.add("skinSelection") // ✅ Open skin selection submenu
+            },
+            onDismiss = {
+                menuStack.removeLastOrNull() // ✅ Remove "range"
+
+                // ✅ Delay reopening the settings menu for a smooth transition
+                coroutineScope.launch {
+                    delay(120)
+                    showSettings = true
+                }
+            }
+        )
+    }
+
+    if (menuStack.last() == "subMenu") {
+        DiceSubMenu(
+            diceType = selectedSubMenuDiceType,
+            menuStack = menuStack, // ✅ Pass menuStack correctly
+            onDismiss = {
+                menuStack.removeLastOrNull() // ✅ Close submenu and go back to Dice Range
+            }
+        )
+    }
+
+    if (menuStack.last() == "skinSelection") {
+        DiceSkinSelectionMenu(
+            diceType = selectedSubMenuDiceType, // Ensure correct dice type is passed
+            menuStack = menuStack,
+            selectedSkins = selectedSkins, // ✅ FIX: Pass selectedSkins here!
+            onDismiss = {
+                menuStack.removeLastOrNull() // Close the skin selection properly
+            }
+        )
+    }
+
+    if (menuStack.last() == "backgroundSelection") {
+        BackgroundSelectionMenu(
+            menuStack = menuStack,
+            coroutineScope = coroutineScope,
+            showSettings = { showSettings = it },
+            selectedBackground = selectedBackground // ✅ FIX: Pass the missing parameter
+        )
+    }
+
+
+
+
+// ✅ Ensure Dice Settings reopens after background menu is dismissed
+    if (menuStack.lastOrNull() == "settings") {
+        DiceSettingsMenu(
+            showSettings = { menuStack.removeLastOrNull() }, // ✅ Properly track menu state
+            menuStack = menuStack
+        )
+    }
+
+
+
+
+
+
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceSettingsMenu(
+    showSettings: (Boolean) -> Unit,
+    menuStack: MutableList<String>
+) {
+    ModalBottomSheet(
+        onDismissRequest = { showSettings(false) }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = "⚙️ Dice Settings", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            ListItem(
+                leadingContent = {
+                    Image(
+                        painter = painterResource(id = R.drawable.bg_icon),
+                        contentDescription = "Background Selection",
+                        modifier = Modifier.size(40.dp)
+                    )
+                },
+                headlineContent = { Text("Background") },
+                trailingContent = {
+                    Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = "Open Background Selection")
+                },
+                modifier = Modifier.clickable {
+                    showSettings(false) // Close settings first
+                    menuStack.add("backgroundSelection") // ✅ Open Background Selection
+                }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(onClick = { showSettings(false) }) {
+                Text("Close")
+            }
+        }
+    }
+}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceRangeMenu(
+    availableDiceTypes: List<Int>,
+    selectedDiceType: Int,
+    selectedSubMenuDiceType: Int, // ✅ Add this parameter
+    menuStack: MutableList<String>,
+    onDiceSelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = "🎲 Select Dice Type", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            availableDiceTypes.forEach { diceType ->
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = getDiceIcon(context, diceType, false)),
+                            contentDescription = "Dice d$diceType",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                    headlineContent = { Text("d$diceType") },
+                    modifier = Modifier.clickable {
+                        onDiceSelected(diceType) // ✅ Correct way to update the selected dice type
+                    }
+                )
+
+
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceSubMenu(
+    diceType: Int,
+    menuStack: MutableList<String>, // ✅ Accept menuStack
+    onDismiss: () -> Unit
+) {
+    var isSubMenuOpen by remember { mutableStateOf(true) } // ✅ Track open/close state
+
+    if (isSubMenuOpen) { // ✅ Show modal only if it's open
+        ModalBottomSheet(onDismissRequest = {
+            isSubMenuOpen = false // ✅ Close immediately
+            menuStack.removeAll { it == "subMenu" } // ✅ Ensure submenu is removed
+        }) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = "🎨 Customize d$diceType", style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 🔹 Add customization options later
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = {
+                    isSubMenuOpen = false // ✅ Close immediately
+                    menuStack.removeAll { it == "subMenu" } // ✅ Ensure submenu is removed
+                }) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceSkinSelectionMenu(
+    diceType: Int,
+    menuStack: MutableList<String>,
+    selectedSkins: MutableMap<Int, Int>, // ✅ Stores selected skin for each dice type
+    onDismiss: () -> Unit
+) {
+    val diceSkinMap: Map<Int, List<Triple<Int, Dp, String>>> = mapOf(
+        2 to listOf(
+            Triple(R.drawable.dice_d2_red_2, 80.dp, "Skin:Red d2"),
+            Triple(R.drawable.dice_d2_white_2, 80.dp, "Skin:White d2"),
+            Triple(R.drawable.dice_d2_black_2, 80.dp, "Skin:Black d2"),
+            Triple(R.drawable.dice_d2_coin_1, 80.dp, "Skin:Coin d2"),
+            Triple(R.drawable.dice_d2_wooden_2, 80.dp, "Skin:Wooden d2"),
+            Triple(R.drawable.dice_d2_blue_2, 80.dp,"Skin:Blue d2"),
+            Triple(R.drawable.dice_d2_moon_2, 80.dp, "Skin:Moon d2"),
+            Triple(R.drawable.dice_d2_green_2, 80.dp, "Skin:Green d2")
+
+        ),
+        4 to listOf(
+            Triple(R.drawable.dice_d4_red_4, 80.dp, "Skin:Red d4"),
+            Triple(R.drawable.dice_d4_white_4, 80.dp, "Skin:White d4"),
+            Triple(R.drawable.dice_d4_black_4, 80.dp, "Skin:Black d4"),
+            Triple(R.drawable.dice_d4_galaxy_4, 80.dp, "Skin:Galaxy d4"),
+            Triple(R.drawable.dice_d4_blue_4,80.dp, "Skin:Blue:d4"),
+            Triple(R.drawable.dice_d4_green_4,80.dp, "Skin:Green:d4")
+        ),
+        6 to listOf(
+            Triple(R.drawable.dice_d6_red_6, 70.dp, "Skin:Red d6"),
+            Triple(R.drawable.dice_d6_white_6, 80.dp, "Skin:White d6"),
+            Triple(R.drawable.dice_d6_black_6, 80.dp, "Skin:Black d6"),
+            Triple(R.drawable.dice_d6_coin_6, 80.dp, "Skin:Gold d6"),
+            Triple(R.drawable.dice_d6_rainbow_6, 80.dp, "Skin:Rainbow d6"),
+            Triple(R.drawable.dice_d6_wooden_6, 80.dp, "Skin:Wooden d6"),
+            Triple(R.drawable.dice_d6_galaxy_6, 80.dp, "Skin:Galaxy d6"),
+            Triple(R.drawable.dice_d6_blue_6, 80.dp, "Skin:Blue d6"),
+            Triple(R.drawable.dice_d6_green_6, 80.dp, "Skin:Green d6")
+        ),
+        8 to listOf(
+            Triple(R.drawable.dice_d8_red_8, 80.dp, "Skin:Red d8"),
+            Triple(R.drawable.dice_d8_white_8, 80.dp, "Skin:White d8"),
+            Triple(R.drawable.dice_d8_black_8, 80.dp, "Skin:Black d8"),
+            Triple(R.drawable.dice_d8_blue_8, 80.dp, "Skin:Blue d8"),
+            Triple(R.drawable.dice_d8_green_8, 80.dp, "Skin:Green d8")
+
+        ),
+        10 to listOf(
+            Triple(R.drawable.dice_d10_red_10, 80.dp, "Skin:Red d10"),
+            Triple(R.drawable.dice_d10_white_10, 80.dp, "Skin:White d10"),
+            Triple(R.drawable.dice_d10_black_10, 80.dp, "Skin:Black d10"),
+            Triple(R.drawable.dice_d10_blue_10, 80.dp, "Skin:Blue d10"),
+            Triple(R.drawable.dice_d10_green_10,80.dp,"Skin:Green d10")
+
+        ),
+        12 to listOf(
+            Triple(R.drawable.dice_d12_red_12, 80.dp, "Skin:Red d12"),
+            Triple(R.drawable.dice_d12_white_12, 80.dp, "Skin:White d12"),
+            Triple(R.drawable.dice_d12_black_12, 80.dp, "Skin:Black d12"),
+            Triple(R.drawable.dice_d12_rainbbow_12, 80.dp, "Skin:Rainbow d12"),
+            Triple(R.drawable.dice_d12_blue_12,80.dp,"Skin:Blue d12"),
+            Triple(R.drawable.dice_d12_green_12,80.dp, "Skin:Green d12")
+        ),
+        20 to listOf(
+            Triple(R.drawable.dice_d20_red_20, 80.dp, "Skin:Red d20"),
+            Triple(R.drawable.dice_d20_white_20, 80.dp, "Skin:White d20"),
+            Triple(R.drawable.dice_d20_black_20, 80.dp, "Skin:Black d20"),
+            Triple(R.drawable.dice_d20_blue_20, 80.dp,"Skin:Blue d20"),
+            Triple(R.drawable.dice_d20_green_20, 80.dp,"Skin:Green d20")
+        )
+    )
+
+    val skins = diceSkinMap[diceType] ?: listOf(Triple(R.drawable.dice_d6_icon, 80.dp, "Default d6"))
+
+    var selectedSkin by remember { mutableStateOf(selectedSkins[diceType] ?: skins.first().first) }
+
+    val isSaveEnabled = selectedSkin != selectedSkins[diceType]
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("🎨 Select Skin for d$diceType", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ✅ Make grid scrollable while keeping buttons fixed
+            Column(modifier = Modifier.weight(1f)) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(skins.size) { index ->
+                        val (skinImage, _, skinLabel) = skins[index]
+                        val isSelected = selectedSkin == skinImage || selectedSkins[diceType] == skinImage
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .clickable { selectedSkin = skinImage }
+                                .border(
+                                    width = if (isSelected) 3.dp else 0.dp,
+                                    color = if (isSelected) Color(0xFFAEC6CF) else Color.Transparent,
+                                    shape = MaterialTheme.shapes.medium
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(90.dp)
+                                    .aspectRatio(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(id = skinImage),
+                                    contentDescription = skinLabel,
+                                    modifier = Modifier
+                                        .size(70.dp)
+                                        .padding(4.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = skinLabel,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ✅ Keep buttons fixed at the bottom
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Button(onClick = { menuStack.removeLastOrNull() }) {
+                    Text("Close")
+                }
+
+                Button(
+                    onClick = {
+                        if (isSaveEnabled) {
+                            selectedSkins[diceType] = selectedSkin
+                        }
+                    },
+                    enabled = isSaveEnabled
+                ) {
+                    Text("Save Skin")
+                }
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BackgroundSelectionMenu(
+    menuStack: MutableList<String>,
+    coroutineScope: CoroutineScope,
+    showSettings: (Boolean) -> Unit,
+    selectedBackground: MutableState<Int>
+) {
+    val backgroundOptions = listOf(
+        Pair(R.drawable.bg_black, "Black Background"),
+        Pair(R.drawable.bg_red, "Red Background"),
+        Pair(R.drawable.bg_blue, "Blue Background"),
+        Pair(R.drawable.bg_green, "Green Background"),
+        Pair(R.drawable.bg_galaxy, "Star Background"),
+        Pair(R.drawable.bg_pool, "Casino Background"),
+        Pair(R.drawable.bg_gold, "Golden Background"),
+        Pair(R.drawable.bg_rainbow, "Rainbow Background")
+    )
+
+    var selectedBackgroundTemp by remember { mutableStateOf(selectedBackground.value) }
+    val isSaveEnabled = selectedBackgroundTemp != selectedBackground.value
+
+    ModalBottomSheet(
+        onDismissRequest = {
+            menuStack.removeLastOrNull()
+            coroutineScope.launch {
+                delay(120)
+                showSettings(true)
+            }
+        },
+        windowInsets = WindowInsets(0)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("🎨 Select Background", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ✅ Keeps scrolling functional while keeping buttons visible
+            Column(modifier = Modifier.weight(1f)) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(backgroundOptions.size) { index ->
+                        val (bgImage, title) = backgroundOptions[index]
+                        val isSelected = bgImage == selectedBackgroundTemp || bgImage == selectedBackground.value
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .clickable {
+                                    selectedBackgroundTemp = bgImage // ✅ Removes extra highlights
+                                }
+                                .border(
+                                    width = if (isSelected) 3.dp else 0.dp,
+                                    color = if (isSelected) Color(0xFFAEC6CF) else Color.Transparent,
+                                    shape = MaterialTheme.shapes.medium
+                                )
+                            ,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Image(
+                                painter = painterResource(id = bgImage),
+                                contentDescription = title,
+                                modifier = Modifier
+                                    .size(100.dp)
+                                    .padding(4.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ✅ Ensures buttons stay at the bottom
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Button(onClick = {
+                    menuStack.removeLastOrNull()
+                    coroutineScope.launch {
+                        delay(120)
+                        showSettings(true)
+                    }
+                }) {
+                    Text("Close")
+                }
+
+                Button(
+                    onClick = {
+                        selectedBackground.value = selectedBackgroundTemp
+                    },
+                    enabled = isSaveEnabled
+                ) {
+                    Text("Save Background")
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
+
+// 🎲 Fix getDiceImage() for Dynamic Ranges
+fun getDiceImage(diceResult: Int): Int {
+    return when (diceResult) {
+        1 -> R.drawable.dice1
+        2 -> R.drawable.dice2
+        3 -> R.drawable.dice3
+        4 -> R.drawable.dice4
+        5 -> R.drawable.dice5
+        6 -> R.drawable.dice6
+        else -> R.drawable.dice1
+    }
+}
+
+fun getDiceIcon(context: Context, diceType: Int, isSkinSelection: Boolean = false): Int {
+    val resourceName = if (isSkinSelection) {
+        when (diceType) {
+            2 -> "dice_d2_red_2"
+            4 -> "dice_d4_red_4"
+            6 -> "dice_d6_red_6"
+            8 -> "dice_d8_red_8"
+            10 -> "dice_d10_red_10"
+            12 -> "dice_d12_red_12"
+            20 -> "dice_d20_red_20"
+            else -> "dice_d6_icon" // Default fallback for unknown dice types
+        }
+    } else {
+        "dice_d${diceType}_icon"
+    }
+
+    val resId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
+    return if (resId != 0) resId else R.drawable.dice_d6_icon // Default fallback
+}
+
+
+
+@Preview(showBackground = true)
+@Composable
+fun DefaultPreview() {
+    DiceRollerAppTheme {
+        DiceRollerScreen(modifier = Modifier)
+    }
+}

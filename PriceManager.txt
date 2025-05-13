@@ -1,0 +1,26 @@
+package com.toni.dicerollerapp
+
+object PriceManager {
+    val itemIds = listOf(
+        "dice_d2_coin",
+        "dice_d2_wooden",//ADDED THIS COMM HERE TESTING PURPOSE
+        "dice_d2_moon",
+        "dice_d4_galaxy",
+        "dice_d6_coin",
+        "dice_d6_wooden",
+        "dice_d6_rainbow",
+        "dice_d6_galaxy",
+        "dice_d12_rainbow",
+        //"dice_d6_white",
+        //"dice_d6_black",
+        "bg_gold",
+        "bg_wood",
+        "bg_rainbow",
+        "bg_galaxy",
+        "bundle_gold",
+        "bundle_wooden",
+        "bundle_galaxy",
+        "bundle_rainbow",
+        "premium_access"
+    )
+}

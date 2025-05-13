@@ -1,0 +1,31 @@
+✅ Individual Skins
+Item ID	Type	Suggested Price
+dice_d2_coin	Single	$1.49
+dice_d2_wooden	Single	$1.49
+dice_d2_moon	Single	$1.49
+dice_d4_galaxy	Single	$1.99
+dice_d6_coin	Single	$1.99
+dice_d6_wooden	Single	$1.99
+dice_d6_rainbow	Single	$2.49
+dice_d6_galaxy	Single	$2.49
+dice_d12_rainbow	Single	$2.49
+
+✅ Backgrounds (tied to bundles)
+Item ID	Type	Suggested Price
+bg_gold	Single BG	$2.49
+bg_wooden	Single BG	$2.49
+bg_galaxy	Single BG	$2.99
+bg_rainbow	Single BG	$2.99
+
+✅ Bundles (better value for grouped items)
+Bundle ID	Contains	Suggested Price
+bundle_gold	d2_coin, d6_coin, bg_gold	$3.49
+bundle_wooden	d2_wooden, d6_wooden, bg_wooden	$3.49
+bundle_galaxy	d2_moon, d4_galaxy, d6_galaxy, bg_galaxy	$4.99
+bundle_rainbow	d6_rainbow, d12_rainbow, bg_rainbow	$4.49
+
+🔹 Bundles save 20–30% vs buying individually.
+
+⭐ Premium (exclusive skins)
+Item ID	Type	Suggested Price
+premium_access	Grants: dice_d6_white, dice_d6_black	$5.99

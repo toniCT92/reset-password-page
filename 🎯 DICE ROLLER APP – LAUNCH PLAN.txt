@@ -1,0 +1,73 @@
+🎯 DICE ROLLER APP – LAUNCH PLAN
+
+GOAL: Launch the app with ads + premium version, ready for Play Store.
+
+────────────────────────────
+PHASE 1: FINAL PREPARATIONS (Days 1–2)
+────────────────────────────
+- Finalize all UI padding, spacing, and transitions
+- Confirm immersive mode works across screens
+- Verify challenge lock (offline, time tamper, alarm)
+- Ensure animations and leaderboard scroll smoothly
+
+────────────────────────────
+PHASE 2: ADS INTEGRATION (Days 3–4)
+────────────────────────────
+- Add AdMob SDK to build.gradle:
+  implementation 'com.google.android.gms:play-services-ads:22.6.0'
+- Initialize AdMob in MainActivity
+- Add banner ads on main screen
+- Add interstitial ad on challenge trigger or dice limit
+- Use test AdMob IDs to verify everything works
+- Ensure no layout breaks or slowdowns with ads
+
+────────────────────────────
+PHASE 3: PREMIUM VERSION SETUP (Days 5–7)
+────────────────────────────
+- Add billing-ktx to dependencies:
+  implementation "com.android.billingclient:billing-ktx:6.1.0"
+- Create non-consumable product in Play Console:
+  ID: premium_upgrade, Price: $2.99
+- Set up BillingClient and purchase flow
+- On purchase success:
+    -> Save isPremium = true in SharedPreferences
+    -> Hide all ads
+    -> Unlock exclusive features (e.g. skins, themes)
+- Show premium badge or indicator in UI
+
+────────────────────────────
+PHASE 4: TESTING + QA (Days 8–9)
+────────────────────────────
+- Full test of all flows (ads, purchases, premium unlock)
+- Use physical and emulator devices
+- Have 5–10 users test features and give feedback
+- Monitor for crashes, missing states, UI glitches
+
+────────────────────────────
+PHASE 5: LAUNCH PREP (Days 10–11)
+────────────────────────────
+- Create Google Play listing
+    -> App title, description, icon
+    -> 3–5 screenshots, ideally including premium features
+- Replace test ad units with live ones
+- Enable Open Testing or Production release in Play Console
+- Confirm billing and ads function in release variant
+- Submit for Google Play review
+
+────────────────────────────
+POST-LAUNCH STRATEGY (Optional)
+────────────────────────────
+- Encourage users to rate and review
+- Promote on Reddit, TikTok, Discord (D&D/board game groups)
+- Prepare weekly updates or events
+- Track premium purchases and ad revenue in analytics
+
+────────────────────────────
+TOTAL TIME: ~11 WORKING DAYS
+────────────────────────────
+
+PRIORITY:
+[ ] Ads implemented and functional
+[ ] Premium billing works and stored
+[ ] Google Play listing created
+[ ] All flows tested before release

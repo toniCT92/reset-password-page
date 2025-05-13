@@ -1,0 +1,41 @@
+# Google Play Console Pricing Templates Setup
+
+1. Template Name: usd_1_49_template - created
+   Default Price (RON): 7.00
+   USD Target: $1.49
+   Products: dice_d2_coin, dice_d2_wooden, dice_d2_moon
+
+2. Template Name: usd_1_99_template - created
+   Default Price (RON): 9.50
+   USD Target: $1.99
+   Products: dice_d4_galaxy, dice_d6_coin, dice_d6_wooden
+
+3. Template Name: usd_2_49_template - created
+   Default Price (RON): 11.90
+   USD Target: $2.49
+   Products: dice_d6_rainbow, dice_d6_galaxy, dice_d12_rainbow, bg_gold, bg_wood
+
+4. Template Name: usd_2_99_template - created
+   Default Price (RON): 14.30
+   USD Target: $2.99
+   Products: bg_rainbow, bg_galaxy
+
+5. Template Name: usd_3_99_template - created
+   Default Price (RON): 19.00
+   USD Target: $3.99
+   Products: bundle_gold, bundle_wooden
+
+6. Template Name: usd_4_49_template - created
+   Default Price (RON): 19.90
+   USD Target: $4.49
+   Products: bundle_galaxy
+
+7. Template Name: usd_4_99_template
+   Default Price (RON): 21.90
+   USD Target: $4.99
+   Products: bundle_rainbow
+
+8. Template Name: usd_5_49_template
+   Default Price (RON): 26.30
+   USD Target: $5.49
+   Products: premium_access

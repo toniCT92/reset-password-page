@@ -1,0 +1,13 @@
+--------- beginning of system
+--------- beginning of main
+---------------------------- PROCESS STARTED (28400) for package com.toni.dicerollerapp ----------------------------
+2025-05-13 01:37:07.959 28400-28400 BillingDebug            com.toni.dicerollerapp               D  🛒 Querying product IDs: [dice_d2_coin, dice_d2_wooden, dice_d2_moon, dice_d4_galaxy, dice_d6_coin, dice_d6_wooden, dice_d6_rainbow, dice_d6_galaxy, dice_d12_rainbow, bg_gold, bg_wood, bg_rainbow, bg_galaxy, bundle_gold, bundle_wooden, bundle_galaxy, bundle_rainbow, premium_access]
+2025-05-13 01:37:07.959 28400-28400 BillingDebug            com.toni.dicerollerapp               D  ⚙️ BillingClient is ready: false
+2025-05-13 01:37:07.960 28400-28400 BillingDebug            com.toni.dicerollerapp               D  📦 Billing result code: -1 (Service connection is disconnected.)
+2025-05-13 01:37:07.960 28400-28400 BillingDebug            com.toni.dicerollerapp               D  ✅ Received 0 product(s) from Google
+2025-05-13 01:37:07.993 28400-28524 BillingDebug            com.toni.dicerollerapp               D  🔗 Billing setup finished. Starting product query.
+2025-05-13 01:37:07.993 28400-28524 BillingDebug            com.toni.dicerollerapp               D  🛒 Querying product IDs: [dice_d2_coin, dice_d2_wooden, dice_d2_moon, dice_d4_galaxy, dice_d6_coin, dice_d6_wooden, dice_d6_rainbow, dice_d6_galaxy, dice_d12_rainbow, bg_gold, bg_wood, bg_rainbow, bg_galaxy, bundle_gold, bundle_wooden, bundle_galaxy, bundle_rainbow, premium_access]
+2025-05-13 01:37:07.993 28400-28524 BillingDebug            com.toni.dicerollerapp               D  ⚙️ BillingClient is ready: true
+2025-05-13 01:37:08.330 28400-28530 BillingDebug            com.toni.dicerollerapp               D  📦 Billing result code: 0 ()
+2025-05-13 01:37:08.330 28400-28530 BillingDebug            com.toni.dicerollerapp               D  ✅ Received 0 product(s) from Google
+2025-05-13 01:37:08.340 28400-28530 BillingDebug            com.toni.dicerollerapp               D  🟩 Product details map contains 0 entries

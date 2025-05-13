@@ -1,0 +1,163 @@
+🎲 Individual Dice Skins
+---dice_d2_coin id2 -----
+
+Short Description: Flip a shiny golden coin-style d2.
+
+Note: Part of Gold Bundle.
+
+Template: usd_1_49_template
+
+---dice_d2_wooden id3 ----
+
+Short Description: Rustic wooden d2 for vintage rolls.
+
+Note: Part of Wooden Bundle.
+
+Template: usd_1_49_template
+
+---dice_d2_moon id4 --------------------------------
+
+Short Description: Lunar-themed d2 with cosmic flair.
+
+Note: Part of Galaxy Bundle.
+
+Template: usd_1_49_template
+
+---dice_d4_galaxy id5----------------------------------
+
+Short Description: D4 with swirling galaxy aesthetics.
+
+Note: Part of Galaxy Bundle.
+
+Template: usd_1_99_template
+
+---dice_d6_coin id6------------------------------------
+
+Short Description: Gold-plated d6, perfect for premium rolls.
+
+Note: Part of Gold Bundle.
+
+Template: usd_1_99_template
+
+---dice_d6_wooden id7----------------------------------
+
+Short Description: Classic wooden d6 with textured finish.
+
+Note: Part of Wooden Bundle.
+
+Template: usd_1_99_template
+
+---dice_d6_rainbow id8-------------------------------
+
+Short Description: Multicolored d6 bursting with energy.
+
+Note: Part of Rainbow Bundle.
+
+Template: usd_2_49_template
+
+---dice_d6_galaxy id9-----------------------
+
+Short Description: Stellar d6 inspired by outer space.
+
+Note: Part of Galaxy Bundle.
+
+Template: usd_2_49_template
+
+---dice_d12_rainbow id10---------------
+
+Short Description: Bright rainbow d12 for vivid rolls.
+
+Note: Part of Rainbow Bundle.
+
+Template: usd_2_49_template
+
+---dice_d6_white  -------------------
+
+Short Description: Iconic white d6 — exclusive premium skin.
+
+Note: Unlock via Premium Access.
+
+Template: Not individually purchasable
+
+---dice_d6_black ------------------------
+
+Short Description: Iconic black d6 — exclusive premium skin.
+
+Note: Unlock via Premium Access.
+
+Template: Not individually purchasable
+
+🌌 Backgrounds
+---bg_gold id11 -------------
+
+Short Description: Golden background for regal rolling.
+
+Note: Part of Gold Bundle.
+
+Template: usd_2_49_template
+
+---bg_wood id12 -------------
+
+Short Description: Warm wooden surface to match natural dice.
+
+Note: Part of Wooden Bundle.
+
+Template: usd_2_49_template
+
+---bg_rainbow id13 ----------
+
+Short Description: Radiant rainbow backdrop for color lovers.
+
+Note: Part of Rainbow Bundle.
+
+Template: usd_2_99_template
+
+---bg_galaxy id14 --------------
+
+Short Description: Deep-space starscape for immersive rolls.
+
+Note: Part of Galaxy Bundle.
+
+Template: usd_2_99_template
+
+📦 Bundles
+---bundle_gold id15---------
+
+Short Description: Exclusive gold dice and golden background.
+
+Includes: dice_d2_coin, dice_d6_coin, bg_gold
+
+Template: usd_3_99_template
+
+---bundle_wooden id16 -----------
+
+Short Description: Wooden dice set with matching background.
+
+Includes: dice_d2_wooden, dice_d6_wooden, bg_wood
+
+Template: usd_3_99_template
+
+---bundle_galaxy id17------------
+
+Short Description: Celestial bundle with moon & galaxy dice.
+
+Includes: dice_d2_moon, dice_d4_galaxy, dice_d6_galaxy, bg_galaxy
+
+Template: usd_4_49_template
+
+---bundle_rainbow id18------------
+
+Short Description: Vibrant rainbow dice and background combo.
+
+Includes: dice_d6_rainbow, dice_d12_rainbow, bg_rainbow
+
+Template: usd_4_99_template
+
+⭐ Premium
+---premium_access id19 ----------
+
+Short Description: Removes ads and unlocks exclusive skins.
+
+Includes: dice_d6_white, dice_d6_black
+
+Template: usd_5_49_template

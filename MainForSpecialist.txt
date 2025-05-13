@@ -1,0 +1,3127 @@
+package com.toni.dicerollerapp
+
+import androidx.compose.ui.layout.ContentScale
+import android.os.Bundle
+import android.media.MediaPlayer
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import com.toni.dicerollerapp.ui.theme.DiceRollerAppTheme
+import kotlinx.coroutines.delay
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.foundation.clickable
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.content.Context
+import android.os.Build
+import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.border
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.lifecycle.lifecycleScope
+import com.toni.dicerollerapp.storage.ChallengeStorageManager
+import androidx.activity.viewModels
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.EaseOutBounce
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import com.toni.dicerollerapp.ui.effect.ConfettiExplosion
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.zIndex
+import androidx.compose.animation.*
+import com.toni.dicerollerapp.storage.AppSettingsManager
+import android.app.AlarmManager
+import android.net.Uri
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import kotlinx.coroutines.Dispatchers
+import android.annotation.SuppressLint
+import android.util.Log
+import com.jakewharton.threetenabp.AndroidThreeTen
+import com.toni.dicerollerapp.storage.TimeTamperingDetector
+import com.toni.dicerollerapp.storage.TimeTamperingDetector.getCurrentDaySeed
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
+import com.toni.dicerollerapp.worker.MidnightResetWorker
+import android.content.res.Resources
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
+import com.toni.dicerollerapp.billing.BillingManager
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import android.app.Activity
+import com.toni.dicerollerapp.ui.theme.userOwnsItem
+import com.toni.dicerollerapp.ui.theme.mapSkinIdToItemId
+import com.toni.dicerollerapp.ui.theme.mapBackgroundToItemId
+import com.android.billingclient.api.ProductDetails
+
+
+
+import android.provider.Settings
+
+
+
+
+
+
+
+
+
+class MainActivity : ComponentActivity() {
+    private val daySeed = mutableStateOf(getCurrentDaySeed())
+    private val authViewModel: AuthViewModel by viewModels()
+    private var didLaunchAlarmIntent = false
+    private lateinit var billingManager: BillingManager
+
+
+    // ✅ Step 1: Declare BroadcastReceiver property
+    private val challengeUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            Log.d("ChallengeUI", "🎯 UI refresh triggered from MainActivity")
+            val currentSeed = getCurrentDaySeed()
+            daySeed.value = currentSeed
+
+            lifecycleScope.launch {
+                if (!ChallengeStorageManager.hasChallengesSavedForToday(this@MainActivity, currentSeed)) {
+                    val newChallenges = generateDailyChallenges(this@MainActivity)
+                    ChallengeStorageManager.saveDailyChallenges(
+                        this@MainActivity,
+                        currentSeed,
+                        newChallenges.map {
+                            it.challenge.copy().apply {
+                                isCompleted.value = false
+                                isActive.value = false
+                            }
+                        }
+                    )
+                    ChallengeStorageManager.saveChallengeProgress(this@MainActivity, currentSeed, newChallenges.map { it.challenge })
+                    ChallengeStorageManager.saveCelebrationStatus(this@MainActivity, currentSeed, newChallenges.map { it.challenge })
+                    Log.d("ResetDebug", "✅ Fallback refresh in MainActivity from receiver")
+                } else {
+                    Log.d("ResetDebug", "🔁 Fallback skipped: challenges already exist")
+                }
+            }
+        }
+    }
+
+
+    @Suppress("NewApi")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+
+
+
+        AndroidThreeTen.init(this)
+
+//        getSharedPreferences("reset_check", Context.MODE_PRIVATE)
+//            .edit().putInt("last_seed", getCurrentDaySeed() - 2).apply()
+
+        // TEMP: Developer trigger to force new challenge reset
+//        val testForceReset = true
+//        if (testForceReset) {
+//            val todaySeed = TimeTamperingDetector.getCurrentDaySeed()
+//            val prefs = getSharedPreferences("reset_check", Context.MODE_PRIVATE)
+//            prefs.edit().putInt("last_seed", todaySeed - 1).apply() // ⬅️ Trick the app into thinking it's yesterday
+//            Log.d("ResetDebug", "🧪 Forced fake last_seed = ${todaySeed - 1}")
+//        }
+
+
+
+
+
+
+
+
+        // ✅ Permission check for Android 12+ (API 31+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (!alarmManager.canScheduleExactAlarms() && !didLaunchAlarmIntent) {
+                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                didLaunchAlarmIntent = true
+                startActivity(intent)
+            } else {
+
+
+
+                scheduleNextMidnightReset(this)
+            }
+        } else {
+
+
+            scheduleNextMidnightReset(this)
+        }
+        val workRequest = PeriodicWorkRequestBuilder<MidnightResetWorker>(1, TimeUnit.DAYS)
+            .setInitialDelay(15, TimeUnit.MINUTES)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "MidnightResetWorker",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+
+        val canSchedule = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            true
+        }
+        AppSettingsManager.saveExactAlarmPermission(this, canSchedule)
+
+
+
+        // ✅ Step 2: Register BroadcastReceiver for challenge reset updates
+        val filter = IntentFilter("com.example.dicerollerapp.UPDATE_CHALLENGES")
+        registerReceiver(challengeUpdateReceiver, filter, RECEIVER_NOT_EXPORTED)
+
+        val userId = Firebase.auth.currentUser?.uid ?: ""
+        billingManager = BillingManager(this, userId)
+        billingManager.startConnection()
+        billingManager.setOnBillingSetupFinishedListener {
+            Log.d("BillingDebug", "🔗 Billing setup finished. Starting product query.")
+            billingManager.queryProductDetails { map ->
+                Log.d("BillingDebug", "🟩 Product details map contains ${map.size} entries")
+                map.forEach { (productId, details) ->
+                    Log.d("BillingDebug", "🟩 Mapped: $productId → ${details.oneTimePurchaseOfferDetails?.formattedPrice}")
+                }
+            }
+        }
+
+
+
+        // ✅ Your existing UI logic untouched
+        setContent {
+            DiceRollerAppTheme {
+                val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+                val username by authViewModel.username.collectAsState()
+                var showWelcomeMessage by remember { mutableStateOf(false) }
+                var showAuthScreen by remember { mutableStateOf(false) }
+                val selectedDieType = remember { mutableStateOf(6) } // or whichever die is default
+                val productDetailsMap = remember { mutableStateOf<Map<String, ProductDetails>>(emptyMap()) }
+
+                LaunchedEffect(Unit) {
+                    billingManager.queryProductDetails {
+                        productDetailsMap.value = it
+                    }
+                }
+
+
+                DiceRollerScreen(
+                    billingManager = billingManager,
+                    seed = daySeed.value,
+                    isLoggedIn = isLoggedIn,
+                    onLoginClick = { showAuthScreen = true },
+                    onLogoutClick = { authViewModel.logout(this) },
+                    showWelcomeMessage = showWelcomeMessage,
+                    username = username,
+                    onDismissWelcome = { showWelcomeMessage = false },
+                    selectedDieType = selectedDieType.value,
+                    productDetailsMap = productDetailsMap.value
+
+                )
+
+                if (showAuthScreen) {
+                    AuthScreen(
+                        viewModel = authViewModel,
+                        onAuthComplete = { showAuthScreen = false }
+                    )
+                }
+
+                LaunchedEffect(isLoggedIn, username) {
+                    if (isLoggedIn) {
+                        repeat(10) { // Wait up to ~1 second for username
+                            if (username.isNotEmpty()) {
+                                showWelcomeMessage = true
+                                return@LaunchedEffect
+                            }
+                            delay(100)
+                        }
+                    }
+                }
+
+
+
+
+            }
+        }
+        enterImmersiveMode()
+        lifecycleScope.launch {
+            Log.d("TamperCheck", "🚀 Starting time check...")
+            val isTimeValid = TimeTamperingDetector.isDeviceTimeValid(this@MainActivity)
+            val prefs = getSharedPreferences("time_check_prefs", Context.MODE_PRIVATE)
+            val wasTampered = prefs.getBoolean("was_time_tampered", false)
+
+            if (!isTimeValid || wasTampered) {
+                if (isTimeValid) {
+                    // ✅ Time was restored → clear flag
+                    prefs.edit().putBoolean("was_time_tampered", false).apply()
+                    Log.d("TamperCheck", "✅ Time restored. Tamper flag cleared.")
+                }
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "⛔ Time manipulation detected. Progress may be affected.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+
+
+
+
+    }
+
+
+
+
+    // ✅ Step 3: Unregister the receiver when MainActivity is destroyed
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(challengeUpdateReceiver)
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        lifecycleScope.launch {
+            val isTimeValid = TimeTamperingDetector.isDeviceTimeValid(this@MainActivity)
+            val prefs = getSharedPreferences("time_check_prefs", Context.MODE_PRIVATE)
+            val wasTampered = prefs.getBoolean("was_time_tampered", false)
+
+            if (!isTimeValid || wasTampered) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "⛔ Time manipulation detected. Challenges are locked.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+
+        val canSchedule = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            true
+        }
+        AppSettingsManager.saveExactAlarmPermission(this, canSchedule)
+
+
+        val currentSeed = TimeTamperingDetector.getCurrentDaySeed()
+        val prefs = getSharedPreferences("reset_check", Context.MODE_PRIVATE)
+        val lastSeed = prefs.getInt("last_seed", 0)
+
+        Log.d("ResetDebug", "🌍 onResume check -> current: $currentSeed | last: $lastSeed")
+
+//        ChallengeStorageManager.clearChallengeProgress(this, currentSeed)
+//        Log.d("ResetDebug", "🧪 TEMP wipe of today's challenge progress")
+
+        if (currentSeed != lastSeed) {
+            Log.d("ResetDebug", "⏳ Detected day change on resume: triggering full reset fallback")
+
+            lifecycleScope.launch {
+                if (!ChallengeStorageManager.hasChallengesSavedForToday(this@MainActivity, currentSeed)) {
+                    Log.d("ResetDebug", "🆕 No saved challenges for today. Generating new batch...")
+
+                    ChallengeStorageManager.clearDailyChallenges(this@MainActivity, currentSeed)
+
+
+                    val newChallenges = generateDailyChallenges(this@MainActivity)
+
+
+                    ChallengeStorageManager.saveDailyChallenges(
+                        this@MainActivity,
+                        currentSeed,
+                        newChallenges.map {
+                            it.challenge.copy().apply {
+                                isCompleted.value = false
+                                isActive.value = false
+                            }
+                        }
+                    )
+
+                    ChallengeStorageManager.saveChallengeProgress(this@MainActivity, currentSeed, newChallenges.map { it.challenge })
+                    ChallengeStorageManager.saveCelebrationStatus(this@MainActivity, currentSeed, newChallenges.map { it.challenge })
+
+                    Log.d("ResetDebug", "✅ Fallback challenges generated on resume!")
+                } else {
+                    Log.d("ResetDebug", "🔁 Fallback skipped: today's challenges already exist")
+                }
+
+                scheduleNextMidnightReset(this@MainActivity)
+                prefs.edit().putInt("last_seed", currentSeed).apply()
+                sendBroadcast(Intent("com.example.dicerollerapp.UPDATE_CHALLENGES"))
+            }
+        } else {
+            Log.d("ResetDebug", "🟢 No day change. Skipping fallback.")
+        }
+        enterImmersiveMode()
+    }
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//-TEMP
+//fun getCurrentDaySeed(): Int {
+//    val calendar = Calendar.getInstance()
+//    calendar.add(Calendar.DAY_OF_YEAR, 1) // 🧪 Simulate tomorrow
+//    return calendar.get(Calendar.YEAR) * 1000 + calendar.get(Calendar.DAY_OF_YEAR)
+//}
+
+
+
+@SuppressLint("UnspecifiedRegisterReceiverFlag")
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+
+fun DiceRollerScreen(
+    seed: Int,
+    isLoggedIn: Boolean,
+    onLoginClick: () -> Unit,
+    onLogoutClick: () -> Unit,
+    showWelcomeMessage: Boolean,
+    username: String,
+    onDismissWelcome: () -> Unit,
+    selectedDieType: Int,
+    billingManager: BillingManager,
+    productDetailsMap: Map<String, ProductDetails>,
+    modifier: Modifier = Modifier
+)
+{
+    val skinOwnershipMap = remember { mutableStateMapOf<String, Boolean>() }
+    val refreshTrigger = remember { mutableStateOf(0) }
+
+    val context = LocalContext.current
+
+    val backgroundOwnershipMap = remember { mutableStateMapOf<String, Boolean>() }
+
+    LaunchedEffect(refreshTrigger.value) {
+        billingManager.queryOwnedItems { owned ->
+            skinOwnershipMap.clear()
+            skinOwnershipMap.putAll(owned)
+            backgroundOwnershipMap.clear()
+            backgroundOwnershipMap.putAll(owned)
+        }
+
+        // ✅ Optional Premium Refresh
+        AppSettingsManager.hasPremiumFlow(context).collect { hasPremium ->
+            Log.d("PremiumRefresh", "Premium refreshed: $hasPremium")
+            // Optional: If you want to store this in state, do it here
+            // isPremium.value = hasPremium
+        }
+    }
+
+
+
+    LaunchedEffect(refreshTrigger.value) {
+        billingManager.queryOwnedItems { owned ->
+            backgroundOwnershipMap.clear()
+            backgroundOwnershipMap.putAll(owned)
+        }
+    }
+
+
+
+
+    val isTampered by AppSettingsManager.timeTamperedFlow(context).collectAsState(initial = false)
+
+
+
+
+
+
+
+// ✅ Read-only flows
+    val isSoundEnabledState = AppSettingsManager.soundEnabledFlow(context).collectAsState(initial = true)
+    val isVibrationEnabledState = AppSettingsManager.vibrationEnabledFlow(context).collectAsState(initial = true)
+    val selectedDiceTypeState = AppSettingsManager.selectedDiceTypeFlow(context).collectAsState(initial = 6)
+    val selectedBackgroundState = AppSettingsManager.selectedBackgroundFlow(context).collectAsState(initial = R.drawable.bg_black)
+
+// ✅ Mutable states synced with flows
+    val isSoundEnabled = AppSettingsManager.soundEnabledFlow(context).collectAsState(initial = true)
+    val isVibrationEnabled = AppSettingsManager.vibrationEnabledFlow(context).collectAsState(initial = true)
+
+
+    val selectedDiceType = remember { mutableStateOf(selectedDiceTypeState.value) }
+    LaunchedEffect(selectedDiceTypeState.value) {
+        selectedDiceType.value = selectedDiceTypeState.value
+    }
+
+    val selectedBackground = remember { mutableStateOf(selectedBackgroundState.value) }
+    LaunchedEffect(selectedBackgroundState.value) {
+        selectedBackground.value = selectedBackgroundState.value
+    }
+
+
+// ✅ No change to the rest of your logic
+    val diceCount = remember { mutableStateOf(5) }
+    val diceResults = remember { mutableStateListOf<Int>() }
+    val totalSum = remember { mutableStateOf(0) }
+    var isRolling by remember { mutableStateOf(false) }
+    val menuStack = remember { mutableStateListOf("main") } // ✅ Track menu navigation
+    val daySeed = seed
+
+    val challenges = remember { mutableStateListOf<DailyChallenge>() }
+    var showConfetti by remember { mutableStateOf(false) }
+    //var totalCompletedChallenges by remember { mutableStateOf(0) }
+    var showCompletionToast by remember { mutableStateOf(false) }
+
+
+    val challengesState = remember { challenges }
+
+
+
+
+
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == "com.example.dicerollerapp.UPDATE_CHALLENGES") {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        Toast.makeText(context, "🎉 New Daily Challenges Available!", Toast.LENGTH_SHORT).show()
+                        val generated = generateDailyChallenges(context!!)
+                        val newChallenges = generated.map { it.challenge }
+
+                        // 🔁 Save state so it's restored correctly next time
+                        ChallengeStorageManager.saveDailyChallenges(context, getCurrentDaySeed(), newChallenges)
+                        ChallengeStorageManager.saveChallengeProgress(context, getCurrentDaySeed(), newChallenges)
+                        ChallengeStorageManager.saveCelebrationStatus(context, getCurrentDaySeed(), newChallenges)
+
+                        challenges.clear()
+                        challenges.addAll(newChallenges)
+                    }
+
+                }
+            }
+
+        }
+
+        val filter = IntentFilter("com.example.dicerollerapp.UPDATE_CHALLENGES")
+        val appContext = context.applicationContext
+
+
+
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
+                appContext.registerReceiver(
+                    receiver,
+                    filter,
+                    /* broadcastPermission = */ null,
+                    /* scheduler = */ null,
+                    /* flags = */ Context.RECEIVER_NOT_EXPORTED
+                )
+
+            }
+
+            Build.VERSION.SDK_INT in 26..32 -> {
+                appContext.safeRegisterReceiver26To32(receiver, filter)
+            }
+
+            else -> {
+                @Suppress("DEPRECATION")
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                    appContext.registerReceiver(receiver, filter)
+                }
+            }
+        }
+
+
+        onDispose {
+            appContext.unregisterReceiver(receiver)
+        }
+    }
+
+
+
+
+    LaunchedEffect(daySeed) {
+        val newChallenges = if (ChallengeStorageManager.hasChallengesSavedForToday(context, getCurrentDaySeed())) {
+            // 🔄 Load saved data
+            val generated = generateDailyChallenges(context)
+            generated.map { it.challenge } // UI needs the structure
+        } else {
+            // 🆕 Only generate + save if no saved version
+            val generated = generateDailyChallenges(context)
+            val challengesOnly = generated.map { it.challenge }
+
+            ChallengeStorageManager.saveDailyChallenges(context, getCurrentDaySeed(), challengesOnly)
+            challengesOnly
+        }
+
+
+        // 🔄 Load saved state into freshly generated challenges
+        ChallengeStorageManager.loadChallengeProgress(context, daySeed, newChallenges)
+        ChallengeStorageManager.loadCelebrationStatus(context, daySeed, newChallenges)
+
+
+
+        challenges.clear()
+        challenges.addAll(newChallenges)
+
+
+    }
+
+
+
+
+    val selectedSkins = remember { mutableStateMapOf<Int, Int>() }
+
+    LaunchedEffect(Unit) {
+        AppSettingsManager.selectedSkinsFlow(context).collect { savedSkins ->
+            selectedSkins.clear()
+            selectedSkins.putAll(savedSkins)
+        }
+    }
+
+
+
+
+
+    LaunchedEffect(Unit) {
+        ChallengeStorageManager.loadCelebrationStatus(context, daySeed, challenges)
+    }
+
+
+
+    val coroutineScope = rememberCoroutineScope()
+    var showSettings by remember { mutableStateOf(false) }
+
+    var selectedSubMenuDiceType by remember { mutableStateOf(6) }
+    //var selectedDiceType by rememberSaveable { mutableStateOf(6) } // Default d6
+
+
+
+
+    // 🎵 Select the correct sound file based on dice count
+    val rollSoundResId = when {
+        diceCount.value == 1 -> R.raw.one_die_throw
+        diceCount.value in 2..3 -> R.raw.two_three_dice_throw
+        else -> R.raw.four_six_dice_throw
+    }
+
+    var rollSound by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    LaunchedEffect(rollSoundResId) {
+        rollSound?.release()
+        rollSound = MediaPlayer.create(context, rollSoundResId)
+    }
+
+    val adjustedSoundDuration = when (diceCount.value) {
+        1 -> rollSound?.duration?.toLong()?.plus(100) ?: 3000L
+        in 2..3 -> rollSound?.duration?.toLong()?.plus(200) ?: 3500L
+        else -> rollSound?.duration?.toLong()?.plus(300) ?: 4500L
+    }
+
+    LaunchedEffect(Unit) {
+        AppSettingsManager.selectedDiceTypeFlow(context).collect { savedDiceType ->
+            selectedDiceType.value = savedDiceType
+
+            // Only initialize once, when opening the app and diceResults is still empty
+            if (diceResults.isEmpty()) {
+                repeat(diceCount.value) {
+                    diceResults.add((1..savedDiceType).random())
+                }
+
+                // Always update sum based on the skin image values
+                updateTotalFromImages(
+                    context = context,
+                    diceResults = diceResults,
+                    selectedDiceType = savedDiceType,
+                    selectedSkins = selectedSkins,
+                    totalSum = totalSum
+                )
+            }
+        }
+    }
+
+
+
+    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+
+    LaunchedEffect(isRolling) {
+        if (isRolling) {
+            // 🔥 Reset dice before animation starts
+            diceResults.clear()
+            repeat(diceCount.value) {
+                diceResults.add((1..selectedDiceType.value).random()) // Use correct dice type
+            }
+
+            if (isSoundEnabled.value) {
+                rollSound?.seekTo(0)
+                rollSound?.start()
+            }
+
+            val changeInterval = 100L
+            val totalChanges = (adjustedSoundDuration / changeInterval).toInt()
+
+            repeat(totalChanges) {
+                for (i in diceResults.indices) {
+                    diceResults[i] = (1..selectedDiceType.value).random() // Ensure rolls are within range
+                }
+
+                println("🎲 Rolling... d${selectedDiceType.value} → Results: $diceResults") // Debugging
+
+                if (isVibrationEnabled.value) {
+                    vibrator?.let {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            it.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
+                        } else {
+                            @Suppress("DEPRECATION")
+                            it.vibrate(30)
+                        }
+                    }
+                }
+
+                delay(changeInterval) // 🔥 Makes sure the animation happens over time
+            }
+
+            vibrator?.cancel() // Stop vibration at the end
+
+            // 🔥 Ensure final roll values match the selected dice type
+            for (i in diceResults.indices) {
+                diceResults[i] = (1..selectedDiceType.value).random()
+            }
+            totalSum.value = diceResults.sum()
+            // 🎯 Check only active challenges
+            val actualDiceValues = diceResults.map {
+                val diceImage = getDiceImage(context, selectedDiceType.value, it, selectedSkins)
+                getDiceValueFromImage(context, diceImage)
+            }
+            totalSum.value = actualDiceValues.sum()
+
+
+
+
+            if (actualDiceValues.isNotEmpty() && actualDiceValues.all { it > 0 }) {
+                val completed = checkChallenges(
+                    context,
+                    actualDiceValues,
+                    challenges.filter { it.isActive.value },
+                    selectedDieType,
+                    isLoggedIn,
+                    username
+                )
+
+                if (completed) {
+                    if (!isOnline(context)) {
+                        Toast.makeText(context, "⚠️ You're offline. Please connect to the internet to complete challenges.", Toast.LENGTH_LONG).show()
+                        return@LaunchedEffect
+                    }
+                    showConfetti = true
+
+                    // 🎉 Show toast message
+                    Toast.makeText(context, "🎉 Challenge Completed!", Toast.LENGTH_SHORT).show()
+
+                    showCompletionToast = true
+
+                    if (isLoggedIn) {
+                        FirestoreManager.updateScore(5)
+                    }
+
+
+
+                    if (isSoundEnabled.value) {
+                        val player = MediaPlayer.create(context, R.raw.challenge_complete_sound)
+                        player.start()
+                    }
+
+
+
+                    delay(3000)
+                    showConfetti = false
+                }
+
+            }
+
+
+            println("🎲 FINAL Dice Results: $diceResults") // Debugging
+            println("🔢 Final Total: ${totalSum.value}")
+            ChallengeStorageManager.saveChallengeProgress(context, daySeed, challenges.map { it })
+            ChallengeStorageManager.saveCelebrationStatus(context, daySeed, challenges)
+
+
+            isRolling = false // 🔥 Ensure `isRolling` updates at the very end
+        }
+    }
+
+
+
+
+
+    // 🎛️ Bottom Sheet State
+    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showBottomSheet by remember { mutableStateOf(false) }
+
+    Box(
+    )
+    {
+        val backgroundRes = selectedBackground.value
+        val safeBackgroundRes = try {
+            if (context.resources.getResourceTypeName(backgroundRes) == "drawable") backgroundRes
+            else R.drawable.bg_black // fallback to black if wrong type
+        } catch (e: Resources.NotFoundException) {
+            Log.e("DiceRollerScreen", "❌ Invalid background resource: $backgroundRes", e)
+            R.drawable.bg_black // fallback to black if not found
+        }
+
+        Image(
+            painter = painterResource(id = safeBackgroundRes),
+            contentDescription = "Background",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+
+
+
+        if (showConfetti) {
+            ConfettiExplosion()
+        }
+
+        if (showCompletionToast) {
+            LaunchedEffect(Unit) {
+                Toast.makeText(context, "🎉 Challenge Completed!", Toast.LENGTH_SHORT).show()
+            }
+        }
+        //Image(
+        //painter = painterResource(id = selectedBackground.value),
+        //contentDescription = "Background",
+        //modifier = Modifier.fillMaxSize(), // ✅ Stretch full screen
+        //contentScale = ContentScale.Crop // ✅ Fills entire area, no gaps!
+        //contentScale = ContentScale.Fit
+
+        //)
+
+
+
+
+        if (showConfetti) {
+            ConfettiExplosion()
+        }
+
+        if (showCompletionToast) {
+            LaunchedEffect(Unit) {
+                Toast.makeText(context, "🎉 Challenge Completed!", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+
+        // Top-Right Login/Logout Button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 32.dp, end = 16.dp)
+                .align(Alignment.TopEnd),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(
+                onClick = {
+                    if (isLoggedIn) onLogoutClick() else onLoginClick()
+                },
+                modifier = Modifier.padding(4.dp),
+                colors = ButtonDefaults.textButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.profile_icon),
+                    contentDescription = "Profile Icon",
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isLoggedIn) "Logout" else "Login",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White
+                )
+            }
+
+
+        }
+
+
+        Text(
+            text = "Number of Dice: ${diceCount.value}",
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 60.dp) // 🔥 Increase this value to move it lower
+                .wrapContentWidth(Alignment.CenterHorizontally)
+        )
+
+
+
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(diceResults.size) { index ->
+                    val diceResult = diceResults[index]
+                    Image(
+                        painter = painterResource(id = getDiceImage(context, selectedDiceType.value, diceResult, selectedSkins)) ,
+                        contentDescription = "Dice",
+                        modifier = Modifier.size(80.dp).padding(8.dp)
+                    )
+                }
+            }
+
+
+            if (!isRolling) {
+                Text(
+                    text = "Total: ${totalSum.value}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .offset(y = (6).dp) // Lower this to move closer to bottom (e.g. -4.dp, -8.dp, -12.dp)
+                .padding(start = 32.dp, end = 32.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { isRolling = true }) {
+                Image(
+                    painter = painterResource(id = R.drawable.dicerollerbutton_no_bg),
+                    contentDescription = "Roll All Dice",
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+
+            IconButton(onClick = {
+                if (diceCount.value < 6) {
+                    diceCount.value++
+                    diceResults.add((1..selectedDiceType.value).random())
+                    totalSum.value = diceResults.sum()
+                }
+            }) {
+                Icon(Icons.Default.Add, contentDescription = "Increase Dice", tint = Color.White, modifier = Modifier.size(32.dp))
+            }
+
+            IconButton(onClick = {
+                if (diceCount.value > 1) {
+                    diceCount.value--
+                    diceResults.removeAt(diceResults.lastIndex)
+                    totalSum.value = diceResults.sum()
+                }
+            }) {
+                Icon(Icons.Default.Remove, contentDescription = "Decrease Dice", tint = Color.White, modifier = Modifier.size(32.dp))
+            }
+
+            IconButton(onClick = { showSettings = true }) {
+                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White, modifier = Modifier.size(32.dp))
+            }
+        }
+
+
+    }
+    if (showWelcomeMessage) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(999f)
+        ) {
+            AnimatedVisibility(
+                visible = showWelcomeMessage,
+                enter = fadeIn(tween(600)),
+                exit = fadeOut(tween(500))
+            ) {
+                ConfettiExplosion()
+            }
+
+            WelcomeMessage(
+                message = "Welcome, $username!",
+                onDismiss = onDismissWelcome
+            )
+        }
+    }
+
+
+
+    // 🎛️ Bottom Sheet Content (EMPTY FOR NOW)
+    if (showSettings) {
+        ModalBottomSheet(
+            onDismissRequest = { showSettings = false }
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = "⚙️ Dice Settings", style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                ListItem(
+                    leadingContent = { Image(painter = painterResource(id = R.drawable.vibration_on_off), contentDescription = "Vibration Toggle", modifier = Modifier.size(40.dp)) },
+                    headlineContent = { Text("Vibration") },
+                    trailingContent = {
+                        Switch(
+                            checked = isVibrationEnabled.value,
+                            onCheckedChange = {
+                                AppSettingsManager.saveVibrationEnabled(context, it)
+                            }
+                        )
+
+                    }
+                )
+
+                ListItem(
+                    leadingContent = { Image(painter = painterResource(id = R.drawable.sound_on_off), contentDescription = "Sound Toggle", modifier = Modifier.size(40.dp)) },
+                    headlineContent = { Text("Sound") },
+                    trailingContent = {
+                        Switch(
+                            checked = isSoundEnabled.value,
+                            onCheckedChange = {
+                                AppSettingsManager.saveSoundEnabled(context, it)
+                            }
+                        )
+
+                    }
+                )
+
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_d6_icon),
+                            contentDescription = "Dice d$selectedDiceType",
+                            modifier = Modifier.size(40.dp) // Adjust icon size
+                        )
+                    },
+                    headlineContent = { Text("Dice Skins") }, // Show selected dice type
+                    trailingContent = {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowRight,
+                            contentDescription = "Open Dice Range Settings"
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showSettings = false // Close settings menu first
+                        menuStack.add("range") // ✅ Open Dice Type selection
+                    }
+                )
+
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = getDiceIcon(LocalContext.current, selectedDiceType.value)),
+                            contentDescription = "Dice d$selectedDiceType",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                    headlineContent = { Text(text = "Dice Type: d${selectedDiceType.value}") } , // Show selected dice type
+                    trailingContent = {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowRight,
+                            contentDescription = "Open Dice Type Selection"
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showSettings = false // Close settings menu first
+                        menuStack.add("diceTypeSelection") // ✅ Open Dice Type Selection
+                    }
+                )
+
+
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = R.drawable.bg_icon), // ✅ Your background icon
+                            contentDescription = "Background Selection",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                    headlineContent = { Text("Background") },
+                    trailingContent = {
+                        Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = "Open Background Selection")
+                    },
+                    modifier = Modifier.clickable {
+                        showSettings = false // Close settings first
+                        menuStack.add("backgroundSelection") // ✅ Open Background Selection
+                    }
+                )
+
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_deals_icon), // Replace with your actual icon
+                            contentDescription = "Dice Deals",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                    headlineContent = { Text("Dice Deals") }, // Title
+                    trailingContent = {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowRight,
+                            contentDescription = "Open Dice Deals"
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showSettings = false // Close settings
+                        menuStack.add("diceDeals") // Open the "Dice Deals" submenu
+                    }
+                )
+
+                val context = LocalContext.current
+                val canUseAlarm by AppSettingsManager.exactAlarmGrantedFlow(context).collectAsState(initial = true)
+                val canAccessChallenges = isLoggedIn && canUseAlarm && !isTampered
+
+
+
+                ListItem(
+                    leadingContent = {
+                        Box {
+                            Image(
+                                painter = painterResource(id = R.drawable.challenge_icon),
+                                contentDescription = "Daily Challenges",
+                                modifier = Modifier.size(40.dp)
+                            )
+                            if (!canAccessChallenges || !isOnline(context)) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_lock),
+                                    contentDescription = "Locked",
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .align(Alignment.TopEnd)
+                                        .background(Color.Black.copy(alpha = 0.6f), shape = MaterialTheme.shapes.small)
+                                        .padding(2.dp),
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    },
+                    headlineContent = { Text("Daily Challenges") },
+                    trailingContent = {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowRight,
+                            contentDescription = "Open Challenges"
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        if (!canAccessChallenges || !isOnline(context)) {
+                            Toast.makeText(
+                                context,
+                                when {
+                                    !isLoggedIn -> "⚠️ Please login to access Challenges"
+                                    !canUseAlarm -> "⏰ Enable exact alarms to access Daily Challenges"
+                                    !isOnline(context) -> "📴 You're offline. Connect to the internet to access Challenges."
+                                    else -> "⛔ Time tampering detected. Challenges are locked."
+                                },
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            showSettings = false
+                            menuStack.add("challenges")
+                        }
+                    }
+                )
+
+
+                ListItem(
+                    leadingContent = {
+                        Box {
+                            Image(
+                                painter = painterResource(id = R.drawable.leaderboard_icon_v2),
+                                contentDescription = "Leaderboard Icon",
+                                modifier = Modifier.size(40.dp)
+                            )
+                            if (!isOnline(context)) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_lock),
+                                    contentDescription = "Locked",
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .align(Alignment.TopEnd)
+                                        .background(Color.Black.copy(alpha = 0.6f), shape = MaterialTheme.shapes.small)
+                                        .padding(2.dp),
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    },
+                    headlineContent = { Text("Leaderboard") },
+                    trailingContent = {
+                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Open Leaderboard")
+                    },
+                    modifier = Modifier.clickable {
+                        if (!isOnline(context)) {
+                            Toast.makeText(context, "⚠️ You're offline. Connect to the internet to view the leaderboard.", Toast.LENGTH_LONG).show()
+                        } else {
+                            showSettings = false
+                            menuStack.add("leaderboard")
+                        }
+                    }
+                )
+
+
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = R.drawable.premium_icon),
+                            contentDescription = "Premium Icon",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                    headlineContent = { Text("Go Premium") },
+                    trailingContent = {
+                        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Upgrade")
+                    },
+                    modifier = Modifier.clickable {
+                        showSettings = false
+                        menuStack.add("premium")
+                    }
+                )
+
+
+
+
+
+                //-TEMP
+//                Spacer(modifier = Modifier.height(16.dp))
+//
+//                Button(
+//                    onClick = {
+//                        coroutineScope.launch {
+//                            challenges.forEach {
+//                                it.isCompleted.value = false
+//                                it.isActive.value = false
+//                                it.shownCelebration = false
+//                            }
+//
+//                            challenges.firstOrNull()?.isActive?.value = true
+//
+//                            ChallengeStorageManager.saveChallengeProgress(context, getCurrentDaySeed(), challenges)
+//                            ChallengeStorageManager.saveCelebrationStatus(context, getCurrentDaySeed(), challenges)
+//
+//                            Toast.makeText(
+//                                context,
+//                                "🧼 All challenges have been reset manually!",
+//                                Toast.LENGTH_SHORT
+//                            ).show()
+//                        }
+//                    },
+//                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray),
+//                    modifier = Modifier.fillMaxWidth(0.9f)
+//                ) {
+//                    Text("🔁 Reset Challenge Statuses")
+//                }
+
+
+
+
+
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = { showSettings = false }) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+
+
+    if (menuStack.last() == "range") {
+        DiceRangeMenu(
+            availableDiceTypes = listOf(2, 4, 6, 8, 10, 12, 20),
+            selectedDiceType = selectedDiceType.value,
+            selectedSubMenuDiceType = selectedSubMenuDiceType,
+            menuStack = menuStack,
+            onDiceSelected = { newDiceType ->
+                selectedSubMenuDiceType = newDiceType
+                menuStack.add("skinSelection") // ✅ Open skin selection submenu
+            },
+            onDismiss = {
+                menuStack.removeLastOrNull() // ✅ Remove "range"
+
+                // ✅ Delay reopening the settings menu for a smooth transition
+                coroutineScope.launch {
+                    delay(120)
+                    showSettings = true
+                }
+            }
+        )
+    }
+
+
+    if (menuStack.last() == "subMenu") {
+        DiceSubMenu(
+            diceType = selectedSubMenuDiceType,
+            menuStack = menuStack, // ✅ Pass menuStack correctly
+            onDismiss = {
+                menuStack.removeLastOrNull() // ✅ Close submenu and go back to Dice Range
+            }
+        )
+    }
+
+    if (menuStack.last() == "skinSelection") {
+        DiceSkinSelectionMenu(
+            diceType = selectedSubMenuDiceType,
+            menuStack = menuStack,
+            selectedSkins = selectedSkins,
+            onDismiss = {
+                menuStack.removeLastOrNull()
+            },
+            billingManager = billingManager,
+            skinOwnershipMap = skinOwnershipMap,
+            refreshTrigger = refreshTrigger,
+            productDetailsMap = productDetailsMap
+
+            )
+    }
+
+
+    if (menuStack.last() == "diceTypeSelection") {
+        DiceTypeSelectionMenu(
+            context = context, // ✅ Pass context
+            menuStack = menuStack,
+            selectedDiceType = selectedDiceType,
+            availableDiceTypes = listOf(2, 4, 6, 8, 10, 12, 20),
+            coroutineScope = coroutineScope,
+            showSettings = { showSettings = it },
+            diceResults = diceResults,
+            diceCount = diceCount,
+            totalSum = totalSum,
+            selectedSkins = selectedSkins, // ✅ Pass selectedSkins
+            onDismiss = {
+                menuStack.removeLastOrNull()
+                coroutineScope.launch {
+                    delay(120)
+                    showSettings = true
+                }
+            }
+        )
+    }
+
+
+    if (menuStack.last() == "backgroundSelection") {
+        BackgroundSelectionMenu(
+            menuStack = menuStack,
+            coroutineScope = coroutineScope,
+            showSettings = { showSettings = it },
+            selectedBackground = selectedBackground,
+            billingManager = billingManager,
+            refreshTrigger = refreshTrigger,
+            backgroundOwnershipMap = backgroundOwnershipMap,
+            productDetailsMap = productDetailsMap
+
+        )
+    }
+
+
+    if (menuStack.last() == "diceDeals") {
+        DiceDealsMenu(
+            menuStack = menuStack,
+            coroutineScope = coroutineScope,
+            billingManager = billingManager,
+            productDetailsMap = productDetailsMap,
+            showSettings = { showSettings = it }
+        )
+    }
+
+    if (menuStack.last() == "leaderboard") {
+        LeaderboardMenu(
+            menuStack = menuStack,
+            coroutineScope = coroutineScope,
+            showSettings = { showSettings = it }
+        )
+    }
+
+
+
+    if (menuStack.last() == "challenges") {
+        if (!isLoggedIn) {
+            menuStack.removeLastOrNull()
+            LaunchedEffect(Unit) {
+                delay(120)
+                showSettings = true
+            }
+            Toast.makeText(context, "⚠\uFE0F Please login to access Challenges", Toast.LENGTH_SHORT).show()
+        } else if (isTampered) {
+            menuStack.removeLastOrNull()
+            LaunchedEffect(Unit) {
+                delay(120)
+                showSettings = true
+            }
+            Toast.makeText(context, "⛔ Time manipulation detected. Challenges are locked.", Toast.LENGTH_SHORT).show()
+        }else if (!isOnline(context)) {
+            menuStack.removeLastOrNull()
+            LaunchedEffect(Unit) {
+                delay(120)
+                showSettings = true
+            }
+            Toast.makeText(context, "⚠\uFE0F You're offline. Challenges require internet access.", Toast.LENGTH_SHORT).show()
+        }
+        else {
+            ChallengeMenu(
+                menuStack = menuStack,
+                coroutineScope = coroutineScope,
+                showSettings = { showSettings = it },
+                challenges = challenges as MutableList<DailyChallenge>,
+                isLoggedIn = isLoggedIn,
+                context = LocalContext.current
+            )
+        }
+    }
+
+    if (menuStack.lastOrNull() == "premium") {
+        PremiumMenu(
+            menuStack = menuStack,
+            coroutineScope = coroutineScope,
+            billingManager = billingManager,
+            refreshTrigger = refreshTrigger,
+            productDetailsMap = productDetailsMap,
+            showSettings = { showSettings = it }
+        )
+    }
+
+
+
+
+
+
+
+    LaunchedEffect(Unit) {
+        delay(300) // Allow SharedPreferences to sync and hydration to complete
+
+        val uncelebrated = challenges.filter { it.isCompleted.value && !it.shownCelebration }
+
+        if (uncelebrated.isNotEmpty()) {
+            showConfetti = true
+            showCompletionToast = true
+
+            // ✅ Mark all as celebrated BEFORE delay, to persist it immediately
+            uncelebrated.forEach { it.shownCelebration = true }
+            ChallengeStorageManager.saveCelebrationStatus(context, daySeed, challenges)
+
+            if (isSoundEnabled.value) {
+                val player = MediaPlayer.create(context, R.raw.challenge_complete_sound)
+                player.start()
+            }
+
+
+
+            delay(3000)
+            showConfetti = false
+        }
+    }
+
+
+
+
+
+
+
+// ✅ Ensure Dice Settings reopens after background menu is dismissed
+
+
+
+
+
+
+}
+
+@Composable
+fun WelcomeMessage(
+    message: String,
+    onDismiss: () -> Unit
+) {
+    val visible = remember { mutableStateOf(true) }
+    val scale = remember { Animatable(0.8f) }
+
+    LaunchedEffect(Unit) {
+        scale.animateTo(
+            1f,
+            animationSpec = tween(durationMillis = 400, easing = EaseOutBounce)
+        )
+        delay(2500)
+        visible.value = false
+        delay(400)
+        onDismiss()
+    }
+
+    AnimatedVisibility(
+        visible = visible.value,
+        enter = fadeIn(tween(400)) + expandVertically(tween(500)),
+        exit = fadeOut(tween(300)) + shrinkVertically(tween(300))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Card(
+                modifier = Modifier
+                    .scale(scale.value)
+                    .shadow(8.dp, shape = RoundedCornerShape(16.dp))
+                    .background(Color(0xFF222222), shape = RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF333333))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "🎉 Welcome!",
+                        style = MaterialTheme.typography.headlineSmall.copy(color = Color.White)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyLarge.copy(color = Color(0xFFDDDDDD))
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceSettingsMenu(
+    showSettings: (Boolean) -> Unit,
+    menuStack: MutableList<String>
+) {
+    ModalBottomSheet(
+        onDismissRequest = { showSettings(false) }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = "⚙️ Dice Settings", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            ListItem(
+                leadingContent = {
+                    Image(
+                        painter = painterResource(id = R.drawable.bg_icon),
+                        contentDescription = "Background Selection",
+                        modifier = Modifier.size(40.dp)
+                    )
+                },
+                headlineContent = { Text("Background") },
+                trailingContent = {
+                    Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = "Open Background Selection")
+                },
+                modifier = Modifier.clickable {
+                    showSettings(false) // Close settings first
+                    menuStack.add("backgroundSelection") // ✅ Open Background Selection
+                }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(onClick = { showSettings(false) }) {
+                Text("Close")
+            }
+        }
+    }
+}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceRangeMenu(
+    availableDiceTypes: List<Int>,
+    selectedDiceType: Int,
+    selectedSubMenuDiceType: Int, // ✅ Add this parameter
+    menuStack: MutableList<String>,
+    onDiceSelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = "🎲 Select Dice Type", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            availableDiceTypes.forEach { diceType ->
+                ListItem(
+                    leadingContent = {
+                        Image(
+                            painter = painterResource(id = getDiceIcon(context, diceType, false)),
+                            contentDescription = "Dice d$diceType",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                    headlineContent = { Text("d$diceType") },
+                    modifier = Modifier.clickable {
+                        onDiceSelected(diceType) // ✅ Correct way to update the selected dice type
+                    }
+                )
+
+
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceSubMenu(
+    diceType: Int,
+    menuStack: MutableList<String>, // ✅ Accept menuStack
+    onDismiss: () -> Unit
+) {
+    var isSubMenuOpen by remember { mutableStateOf(true) } // ✅ Track open/close state
+
+    if (isSubMenuOpen) { // ✅ Show modal only if it's open
+        ModalBottomSheet(onDismissRequest = {
+            isSubMenuOpen = false // ✅ Close immediately
+            menuStack.removeAll { it == "subMenu" } // ✅ Ensure submenu is removed
+        }) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = "🎨 Customize d$diceType", style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 🔹 Add customization options later
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = {
+                    isSubMenuOpen = false // ✅ Close immediately
+                    menuStack.removeAll { it == "subMenu" } // ✅ Ensure submenu is removed
+                }) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceSkinSelectionMenu(
+    diceType: Int,
+    menuStack: MutableList<String>,
+    selectedSkins: MutableMap<Int, Int>,
+    onDismiss: () -> Unit,
+    billingManager: BillingManager,
+    skinOwnershipMap: Map<String, Boolean>,
+    refreshTrigger: MutableState<Int>,
+    productDetailsMap: Map<String, ProductDetails>
+) {
+
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val diceSkinMap: Map<Int, List<Triple<Int, Dp, String>>> = mapOf(
+        2 to listOf(
+            Triple(R.drawable.dice_d2_red_2, 80.dp, "Skin:Red d2"),
+            Triple(R.drawable.dice_d2_white_2, 80.dp, "Skin:White d2"),
+            Triple(R.drawable.dice_d2_black_2, 80.dp, "Skin:Black d2"),
+            Triple(R.drawable.dice_d2_blue_2, 80.dp,"Skin:Blue d2"),
+            Triple(R.drawable.dice_d2_green_2, 80.dp, "Skin:Green d2"),
+            Triple(R.drawable.dice_d2_coin_2, 80.dp, "Skin:Coin d2"),
+            Triple(R.drawable.dice_d2_wooden_2, 80.dp, "Skin:Wooden d2"),
+            Triple(R.drawable.dice_d2_moon_2, 80.dp, "Skin:Moon d2")
+
+
+        ),
+        4 to listOf(
+            Triple(R.drawable.dice_d4_red_4, 80.dp, "Skin:Red d4"),
+            Triple(R.drawable.dice_d4_white_4, 80.dp, "Skin:White d4"),
+            Triple(R.drawable.dice_d4_black_4, 80.dp, "Skin:Black d4"),
+            Triple(R.drawable.dice_d4_blue_4,80.dp, "Skin:Blue:d4"),
+            Triple(R.drawable.dice_d4_green_4,80.dp, "Skin:Green:d4"),
+            Triple(R.drawable.dice_d4_galaxy_4, 80.dp, "Skin:Galaxy d4")
+        ),
+        6 to listOf(
+            Triple(R.drawable.dice_d6_red_6, 70.dp, "Skin:Red d6"),
+            Triple(R.drawable.dice_d6_white_6, 80.dp, "Skin:White d6"),
+            Triple(R.drawable.dice_d6_black_6, 80.dp, "Skin:Black d6"),
+            Triple(R.drawable.dice_d6_blue_6, 80.dp, "Skin:Blue d6"),
+            Triple(R.drawable.dice_d6_green_6, 80.dp, "Skin:Green d6"),
+            Triple(R.drawable.dice_d6_coin_6, 80.dp, "Skin:Gold d6"),
+            Triple(R.drawable.dice_d6_wooden_6, 80.dp, "Skin:Wooden d6"),
+            Triple(R.drawable.dice_d6_rainbow_6, 80.dp, "Skin:Rainbow d6"),
+            Triple(R.drawable.dice_d6_galaxy_6, 80.dp, "Skin:Galaxy d6")
+        ),
+        8 to listOf(
+            Triple(R.drawable.dice_d8_red_8, 80.dp, "Skin:Red d8"),
+            Triple(R.drawable.dice_d8_white_8, 80.dp, "Skin:White d8"),
+            Triple(R.drawable.dice_d8_black_8, 80.dp, "Skin:Black d8"),
+            Triple(R.drawable.dice_d8_blue_8, 80.dp, "Skin:Blue d8"),
+            Triple(R.drawable.dice_d8_green_8, 80.dp, "Skin:Green d8")
+
+        ),
+        10 to listOf(
+            Triple(R.drawable.dice_d10_red_10, 80.dp, "Skin:Red d10"),
+            Triple(R.drawable.dice_d10_white_10, 80.dp, "Skin:White d10"),
+            Triple(R.drawable.dice_d10_black_10, 80.dp, "Skin:Black d10"),
+            Triple(R.drawable.dice_d10_blue_10, 80.dp, "Skin:Blue d10"),
+            Triple(R.drawable.dice_d10_green_10,80.dp,"Skin:Green d10")
+
+        ),
+        12 to listOf(
+            Triple(R.drawable.dice_d12_red_12, 80.dp, "Skin:Red d12"),
+            Triple(R.drawable.dice_d12_white_12, 80.dp, "Skin:White d12"),
+            Triple(R.drawable.dice_d12_black_12, 80.dp, "Skin:Black d12"),
+            Triple(R.drawable.dice_d12_blue_12,80.dp,"Skin:Blue d12"),
+            Triple(R.drawable.dice_d12_green_12,80.dp, "Skin:Green d12"),
+            Triple(R.drawable.dice_d12_rainbow_12, 80.dp, "Skin:Rainbow d12")
+        ),
+        20 to listOf(
+            Triple(R.drawable.dice_d20_red_20, 80.dp, "Skin:Red d20"),
+            Triple(R.drawable.dice_d20_white_20, 80.dp, "Skin:White d20"),
+            Triple(R.drawable.dice_d20_black_20, 80.dp, "Skin:Black d20"),
+            Triple(R.drawable.dice_d20_blue_20, 80.dp,"Skin:Blue d20"),
+            Triple(R.drawable.dice_d20_green_20, 80.dp,"Skin:Green d20")
+        )
+    )
+
+    val skins = diceSkinMap[diceType] ?: listOf(Triple(R.drawable.dice_d6_icon, 80.dp, "Default d6"))
+
+    var selectedSkin by remember { mutableStateOf(selectedSkins[diceType] ?: skins.first().first) }
+
+    val isSaveEnabled = selectedSkin != selectedSkins[diceType]
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("🎨 Select Skin for d$diceType", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ✅ Make grid scrollable while keeping buttons fixed
+            Column(modifier = Modifier.weight(1f)) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(skins.size) { index ->
+                        val (skinImage, _, skinLabel) = skins[index]
+                        val itemId = mapSkinIdToItemId(skinImage)
+                        val userId = Firebase.auth.currentUser?.uid
+                        var owns by remember { mutableStateOf(false) }
+                        val details = productDetailsMap[itemId]
+                        if (details == null) {
+                            Log.w("BillingUI", "⚠️ Missing ProductDetails for ID: $itemId")
+                        }
+                        val rawPrice = details?.oneTimePurchaseOfferDetails?.formattedPrice ?: "..."
+
+                        val restrictedDice = listOf("dice_d6_white", "dice_d6_black")
+                        val hasPremium = skinOwnershipMap["premium_access"] == true
+                        val priceLabel = when {
+                            itemId in restrictedDice && !hasPremium -> "Premium Only"
+                            rawPrice == null -> "$1.49"
+                            else -> rawPrice
+                        }
+
+
+                        LaunchedEffect(userId, itemId, refreshTrigger.value) {
+                            if (userId != null) {
+                                userOwnsItem(userId, itemId) { result -> owns = result }
+                            } else {
+                                owns = itemId == "free"
+                            }
+                        }
+
+                        val isSelected = selectedSkin == skinImage || selectedSkins[diceType] == skinImage
+                        val context = LocalContext.current
+                        val activity = context as? Activity
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .border(
+                                    width = if (isSelected) 3.dp else 0.dp,
+                                    color = if (isSelected) Color(0xFFAEC6CF) else Color.Transparent,
+                                    shape = MaterialTheme.shapes.medium
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        )
+                        {
+                            Image(
+                                painter = painterResource(id = skinImage),
+                                contentDescription = skinLabel,
+                                modifier = Modifier.size(70.dp).padding(4.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(skinLabel, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Button(
+                                onClick = {
+                                    if (owns) {
+                                        selectedSkin = skinImage
+                                    } else {
+                                        if (priceLabel == "Premium Only") {
+                                            Toast.makeText(context, "This item is Premium only.", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            activity?.let {
+                                                billingManager.launchPurchaseFlow(it, itemId) {
+                                                    refreshTrigger.value++
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (owns) Color(0xFF4CAF50) else Color(0xFFFFA500)
+                                ),
+                                modifier = Modifier.fillMaxWidth(0.9f)
+                            ) {
+                                Text(
+                                    text = if (owns) "Select Skin" else "Buy for $priceLabel",
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+
+
+
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ✅ Keep buttons fixed at the bottom
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Button(onClick = {
+                    menuStack.removeLastOrNull()
+                }) {
+                    Text("Close")
+                }
+
+                val isSaveEnabled = selectedSkin != selectedSkins[diceType]
+
+                Button(
+                    onClick = {
+                        val userId = Firebase.auth.currentUser?.uid
+                        if (userId == null) {
+                            Toast.makeText(context, "❌ You must be logged in.", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+
+                        val requiredItemId = mapSkinIdToItemId(selectedSkin)
+
+                        userOwnsItem(userId, requiredItemId) { owns ->
+                            if (owns) {
+                                selectedSkins[diceType] = selectedSkin
+                                AppSettingsManager.saveSelectedSkins(context, selectedSkins)
+                            } else {
+                                Toast.makeText(context, "🔒 You don’t own this skin. Purchase required!", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    enabled = isSaveEnabled
+                ) {
+                    Text("Save Skin")
+                }
+            }
+
+        }
+    }
+}
+
+fun updateTotalFromImages(
+    context: Context,
+    diceResults: List<Int>,
+    selectedDiceType: Int,
+    selectedSkins: Map<Int, Int>,
+    totalSum: MutableState<Int>
+) {
+    val actualDiceValues = diceResults.map { result ->
+        val image = getDiceImage(context, selectedDiceType, result, selectedSkins)
+        getDiceValueFromImage(context, image)
+    }
+
+    totalSum.value = actualDiceValues.sum()
+
+
+}
+
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BackgroundSelectionMenu(
+    menuStack: MutableList<String>,
+    coroutineScope: CoroutineScope,
+    billingManager: BillingManager,
+    showSettings: (Boolean) -> Unit,
+    selectedBackground: MutableState<Int>,
+    refreshTrigger: MutableState<Int>,
+    backgroundOwnershipMap: MutableMap<String, Boolean>,
+    productDetailsMap: Map<String, ProductDetails>
+
+    ) {
+    val context = LocalContext.current
+    val userId = Firebase.auth.currentUser?.uid
+    val activity = context as? Activity
+    val refreshTrigger = remember { mutableStateOf(0) }
+
+    var selectedBackgroundTemp by rememberSaveable { mutableStateOf(selectedBackground.value) }
+    val isSaveEnabled = selectedBackgroundTemp != selectedBackground.value
+
+    val backgroundOptions = listOf(
+        Triple(R.drawable.bg_black, "Bg: Black", "free"),
+        Triple(R.drawable.bg_red, "Bg: Red", "free"),
+        Triple(R.drawable.bg_blue, "Bg: Blue", "free"),
+        Triple(R.drawable.bg_green, "Bg: Green", "free"),
+        Triple(R.drawable.bg_gold, "Bg: Golden", "bg_gold"),
+        Triple(R.drawable.bg_pool, "Bg: Wooden", "bg_wood"),
+        Triple(R.drawable.bg_rainbow, "Bg: Rainbow", "bg_rainbow"),
+        Triple(R.drawable.bg_galaxy_better_quality, "Bg: Galaxy", "bg_galaxy")
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = {
+            menuStack.removeLastOrNull()
+            coroutineScope.launch {
+                delay(120)
+                showSettings(true)
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "🎨 Select Background",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
+
+            Box(modifier = Modifier.weight(1f)) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp)
+                ) {
+                    items(backgroundOptions.size) { index ->
+                        val (bgImage, label, itemId) = backgroundOptions[index]
+                        var owns by remember { mutableStateOf(false) }
+                        val details = productDetailsMap[itemId]
+                        if (details == null) {
+                            Log.w("BillingUI", "⚠️ Missing ProductDetails for ID: $itemId")
+                        }
+                        val priceLabel = details?.oneTimePurchaseOfferDetails?.formattedPrice ?: "Loading..."
+
+
+
+                        LaunchedEffect(userId, itemId, refreshTrigger.value) {
+                            if (userId != null) {
+                                userOwnsItem(userId, itemId) { result ->
+                                    owns = result
+                                    backgroundOwnershipMap[itemId] = result
+                                }
+                            } else {
+                                owns = itemId == "free"
+                            }
+                        }
+
+
+                        val isHighlighted = bgImage == selectedBackground.value || bgImage == selectedBackgroundTemp
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .border(
+                                    width = if (isHighlighted) 3.dp else 0.dp,
+                                    color = if (isHighlighted) Color(0xFFAEC6CF) else Color.Transparent,
+                                    shape = MaterialTheme.shapes.medium
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Image(
+                                painter = painterResource(id = bgImage),
+                                contentDescription = label,
+                                modifier = Modifier
+                                    .size(100.dp)
+                                    .padding(4.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Text(label, color = Color.White)
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Button(
+                                onClick = {
+                                    if (priceLabel == "Premium Only") {
+                                        Toast.makeText(context, "This is a premium-only item", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    if (owns) {
+                                        selectedBackgroundTemp = bgImage
+                                    } else {
+                                        activity?.let {
+                                            billingManager.launchPurchaseFlow(it, itemId) {
+                                                refreshTrigger.value++
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(0.9f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (owns) Color(0xFF4CAF50) else Color(0xFFFFA500)
+                                )
+                            ) {
+                                Text(
+                                    text = if (owns) "Select Background" else "Buy for $priceLabel",
+                                    color = Color.White,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Button(onClick = {
+                    menuStack.removeLastOrNull()
+                    coroutineScope.launch {
+                        delay(120)
+                        showSettings(true)
+                    }
+                }) {
+                    Text("Close")
+                }
+
+                Button(
+                    onClick = {
+                        val requiredItemId = mapBackgroundToItemId(selectedBackgroundTemp)
+                        userId?.let {
+                            userOwnsItem(it, requiredItemId) { owns ->
+                                if (owns) {
+                                    selectedBackground.value = selectedBackgroundTemp
+                                    AppSettingsManager.saveSelectedBackground(context, selectedBackgroundTemp)
+                                } else {
+                                    Toast.makeText(context, "🔒 You don’t own this background.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                    enabled = isSaveEnabled
+                ) {
+                    Text("Save Background")
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+fun getDiceImage(context: Context, diceType: Int, diceResult: Int, selectedSkins: Map<Int, Int>): Int {
+    val selectedSkinRes = selectedSkins[diceType] ?: getDefaultDiceSkin(diceType)
+
+    val skinName = if (isValidDrawableRes(context, selectedSkinRes)) {
+        extractSkinName(context, selectedSkinRes)
+    } else {
+        Log.e("getDiceImage", "❌ Invalid drawable resource ID: $selectedSkinRes")
+        "red" // fallback skin
+    }
+
+    val maxFaceValue = when (diceType) {
+        2 -> 2
+        4 -> 4
+        else -> diceType
+    }
+    val validResult = diceResult.coerceIn(1, maxFaceValue)
+
+    val resourceName = "dice_d${diceType}_${skinName}_$validResult"
+    val resId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
+
+    println("🔍 Looking for image: $resourceName (Found: ${resId != 0})")
+    return if (resId != 0) {
+        resId
+    } else {
+        Log.e("DiceImage", "⚠️ Missing resource for $resourceName, falling back to default skin.")
+        getDefaultDiceSkin(diceType)
+    }
+}
+
+
+
+
+// Extracts the skin name from the resource entry
+//fun extractSkinName(context: Context, skinRes: Int): String {
+//    val fullName = context.resources.getResourceEntryName(skinRes) // e.g., "dice_d6_red_6"
+//    val parts = fullName.split("_") // ["dice", "d6", "red", "6"]
+//
+//    return if (parts.size >= 3) parts[2] else "red" // Extract skin name or fallback to "red"
+//}
+
+fun isValidDrawableRes(context: Context, resId: Int): Boolean {
+    return try {
+        context.resources.getResourceTypeName(resId) == "drawable"
+    } catch (e: Resources.NotFoundException) {
+        false
+    }
+}
+
+
+fun extractSkinName(context: Context, skinRes: Int): String {
+    return try {
+        val typeName = context.resources.getResourceTypeName(skinRes)
+        if (typeName != "drawable") {
+            Log.e("extractSkinName", "❌ Invalid resource type: $typeName")
+            "red" // fallback
+        } else {
+            val fullName = context.resources.getResourceEntryName(skinRes) // e.g., "dice_d6_red_6"
+            val parts = fullName.split("_") // ["dice", "d6", "red", "6"]
+            if (parts.size >= 3) parts[2] else "red" // Extract skin name or fallback
+        }
+    } catch (e: Resources.NotFoundException) {
+        Log.e("extractSkinName", "❌ Invalid resource ID: $skinRes", e)
+        "red" // fallback
+    }
+}
+
+
+
+
+fun getDiceValueFromImage(context: Context, diceImageRes: Int): Int {
+    Log.d("ResDebug", "Trying to resolve resId: $diceImageRes")
+
+    val resourceName = context.resources.getResourceEntryName(diceImageRes)
+    // Example: "dice_d2_wooden_1"
+
+    val parts = resourceName.split("_") // ["dice", "d2", "wooden", "1"]
+
+    val lastNumber = parts.lastOrNull()?.toIntOrNull() ?: run {
+        println("⚠️ ERROR: Could not extract value from $resourceName")
+        1 // Fallback to 1 if extraction fails
+    }
+// ✅ Extract LAST number
+
+    return lastNumber ?: 1 // Default to 1 if something goes wrong
+}
+
+
+// Provides a default skin for each dice type
+fun getDefaultDiceSkin(diceType: Int): Int {
+    return when (diceType) {
+        2 -> R.drawable.dice_d2_red_2
+        4 -> R.drawable.dice_d4_red_4
+        6 -> R.drawable.dice_d6_red_6
+        8 -> R.drawable.dice_d8_red_8
+        10 -> R.drawable.dice_d10_red_10
+        12 -> R.drawable.dice_d12_red_12
+        20 -> R.drawable.dice_d20_red_20
+        else -> R.drawable.dice_d6_red_6 // Default fallback
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceTypeSelectionMenu(
+    context: Context,
+    menuStack: MutableList<String>,
+    selectedDiceType: MutableState<Int>,
+    availableDiceTypes: List<Int>,
+    coroutineScope: CoroutineScope,
+    showSettings: (Boolean) -> Unit,
+    diceResults: MutableList<Int>,
+    diceCount: MutableState<Int>,
+    totalSum: MutableState<Int>,
+    selectedSkins: Map<Int, Int>,
+    onDismiss: () -> Unit
+) {
+    var tempSelectedDice by remember { mutableStateOf(selectedDiceType.value) }
+    val isSaveEnabled = tempSelectedDice != selectedDiceType.value
+
+    ModalBottomSheet(
+        onDismissRequest = {
+            menuStack.removeLastOrNull()
+            coroutineScope.launch {
+                delay(120)
+                showSettings(true)
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("🎲 Select Dice Type", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(availableDiceTypes.size) { index ->
+                        val diceType = availableDiceTypes[index]
+                        val isSelected = tempSelectedDice == diceType
+                        val isApplied = selectedDiceType.value == diceType
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .clickable { tempSelectedDice = diceType }
+                                .border(
+                                    width = if (isSelected || isApplied) 3.dp else 0.dp,
+                                    color = if (isSelected || isApplied) Color(0xFFCCCCCC) else Color.Transparent, // ✅ Light gray/white highlight
+                                    shape = MaterialTheme.shapes.medium
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Image(
+                                painter = painterResource(id = getDiceIcon(LocalContext.current, diceType)),
+                                contentDescription = "d$diceType",
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .padding(4.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "d$diceType",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Button(onClick = {
+                    menuStack.removeLastOrNull()
+                    coroutineScope.launch {
+                        delay(120)
+                        showSettings(true)
+                    }
+                }) {
+                    Text("Close")
+                }
+
+                Button(
+                    onClick = {
+                        selectedDiceType.value = tempSelectedDice
+                        AppSettingsManager.saveSelectedDiceType(context, tempSelectedDice) // ✅ Save persistently
+
+                        diceResults.clear()
+                        repeat(diceCount.value) {
+                            diceResults.add((1..selectedDiceType.value).random())
+                        }
+
+                        totalSum.value = diceResults.sumOf { result ->
+                            val diceImage = getDiceImage(context, selectedDiceType.value, result, selectedSkins)
+                            val extractedValue = getDiceValueFromImage(context, diceImage)
+                            extractedValue
+                        }
+                    },
+
+                    enabled = isSaveEnabled
+                ) {
+                    Text("Save & Apply")
+                }
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceDealsMenu(
+    menuStack: MutableList<String>,
+    coroutineScope: CoroutineScope,
+    billingManager: BillingManager,
+    showSettings: (Boolean) -> Unit,
+    productDetailsMap: Map<String, ProductDetails>
+
+) {
+    val context = LocalContext.current
+    val userId = Firebase.auth.currentUser?.uid
+    val refreshTrigger = remember { mutableStateOf(0) } // 🔁
+
+    val ownedBundles = remember { mutableStateMapOf<String, Boolean>() }
+
+    LaunchedEffect(userId, refreshTrigger.value) {
+        if (userId != null) {
+            val bundleIds = listOf("bundle_gold", "bundle_wooden", "bundle_galaxy", "bundle_rainbow", "premium_access")
+            for (id in bundleIds) {
+                userOwnsItem(userId, id) { result ->
+                    ownedBundles[id] = result
+                }
+            }
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = {
+            menuStack.removeLastOrNull()
+            coroutineScope.launch {
+                delay(120)
+                showSettings(true)
+            }
+        },
+        modifier = Modifier.fillMaxSize() // 🔥 Ensures Bottom Sheet uses full space
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize() // Prevents content from being pushed down
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+                    .verticalScroll(rememberScrollState()), // 🔥 Enables scrolling if needed
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 🔹 Title: "Dice Deals"
+                Text(
+                    text = "🎲 Dice Deals",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(36.dp)) // 🔥 Reduce excess spacing
+
+                // 🔥 Gold Dice Bundle
+                Text(
+                    text = "🔥 Gold Dice Bundle!",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Image(
+                    painter = painterResource(id = R.drawable.bundle_gold_dice),
+                    contentDescription = "Exclusive Gold Dice Bundle",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    contentScale = ContentScale.Fit // ✅ Matches dimensions correctly
+                )
+
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Description
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Contains:",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("• Coin d2", color = Color.LightGray, fontSize = 16.sp)
+                        Text("• Gold d6", color = Color.LightGray, fontSize = 16.sp)
+                        Text("• Golden Background", color = Color.LightGray, fontSize = 16.sp)
+                    }
+
+                    // Images
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_d2_coin_1),
+                            contentDescription = "d2 golden",
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_d6_coin_6),
+                            contentDescription = "d6 golden",
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Image(
+                            painter = painterResource(id = R.drawable.bg_gold),
+                            contentDescription = "Golden BG",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 🔹 Price Tag
+
+
+                val context = LocalContext.current
+                val activity = context as? Activity
+
+                val isOwnedGold = ownedBundles["bundle_gold"] == true
+
+                Button(
+                    onClick = {
+                        if (!isOwnedGold) {
+                            activity?.let {
+                                billingManager.launchPurchaseFlow(it, "bundle_gold") {
+                                    refreshTrigger.value++
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isOwnedGold,
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isOwnedGold) Color.Gray else Color(0xFFFFD700)),
+                    modifier = Modifier.fillMaxWidth(0.8f)
+                ) {
+                    val goldPrice = productDetailsMap["bundle_gold"]?.oneTimePurchaseOfferDetails?.formattedPrice
+                    val finalGoldPrice = goldPrice ?: "..."
+
+                    Text(
+                        text = if (isOwnedGold) "✅ Owned" else "Buy for $finalGoldPrice" ,
+                        color = Color.White
+                    )
+
+                }
+
+
+
+
+
+                Spacer(modifier = Modifier.height(16.dp)) // 🔥 Adjust spacing to avoid pushing down content
+
+                // 🪵 Wooden Dice Bundle
+                Text(
+                    text = "🪵 Wooden Dice Bundle!",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Image(
+                    painter = painterResource(id = R.drawable.wooden_bundle_realistic_form),
+                    contentDescription = "Exclusive Wooden Dice Bundle",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    contentScale = ContentScale.Fit // ✅ Fixes height issue & ensures exact match
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Description on the left
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Contains:",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("• Wooden d2", color = Color.LightGray, fontSize = 16.sp)
+                        Text("• Wooden d6", color = Color.LightGray, fontSize = 16.sp)
+                        Text("• Wooden Background", color = Color.LightGray, fontSize = 16.sp)
+                    }
+
+                    // Images on the right
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_d2_wooden_1),
+                            contentDescription = "d2 wooden",
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_d6_wooden_6),
+                            contentDescription = "d6 wooden",
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Image(
+                            painter = painterResource(id = R.drawable.bg_pool_old),
+                            contentDescription = "Wooden BG",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 🔹 Price Tag for Wooden Dice
+
+
+                val isOwnedWooden = ownedBundles["bundle_wooden"] == true
+
+                Button(
+                    onClick = {
+                        if (!isOwnedWooden) {
+                            activity?.let {
+                                billingManager.launchPurchaseFlow(it, "bundle_wooden") {
+                                    refreshTrigger.value++
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isOwnedWooden,
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isOwnedWooden) Color.Gray else Color(0xFFFFD700)),
+                    modifier = Modifier.fillMaxWidth(0.8f)
+                ) {
+                    val woodenPrice = productDetailsMap["bundle_wooden"]?.oneTimePurchaseOfferDetails?.formattedPrice
+                    val finalWoodenPrice = woodenPrice ?: "..."
+
+                    Text(
+                        text = if (isOwnedWooden) "✅ Owned" else "Buy for $finalWoodenPrice",
+                        color = Color.White
+                    )
+
+
+                }
+
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "\uD83E\uDE90 Galaxy Dice Bundle",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Image(
+                    painter = painterResource(id = R.drawable.galaxy_bundle_updated_bg),
+                    contentDescription = "Exclusive Galaxy Dice Bundle",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    contentScale = ContentScale.Fit // ✅ Fixes height issue & ensures exact match
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Description on the left
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Contains:",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("• Moon d2", color = Color.LightGray, fontSize = 16.sp)
+                        Text("• Galaxy d4", color = Color.LightGray, fontSize = 16.sp)
+                        Text("• Galaxy d6", color = Color.LightGray, fontSize = 16.sp)
+                        Text("• Galaxy Background", color = Color.LightGray, fontSize = 16.sp)
+                    }
+
+                    // Images on the right
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_d2_moon_2),
+                            contentDescription = "d2 galaxy",
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_d4_galaxy_4),
+                            contentDescription = "d4 galaxy",
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_d6_galaxy_6),
+                            contentDescription = "d6 galaxy",
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Image(
+                            painter = painterResource(id = R.drawable.bg_galaxy_better_quality),
+                            contentDescription = "Galaxy BG",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 🔹 Price Tag for Wooden Dice
+                val isOwnedGalaxy = ownedBundles["bundle_galaxy"] == true
+
+                Button(
+                    onClick = {
+                        if (!isOwnedGalaxy) {
+                            activity?.let {
+                                billingManager.launchPurchaseFlow(it, "bundle_galaxy") {
+                                    refreshTrigger.value++
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isOwnedGalaxy,
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isOwnedGalaxy) Color.Gray else Color(0xFFFFD700)),
+                    modifier = Modifier.fillMaxWidth(0.8f)
+                ) {
+                    val galaxyPrice = productDetailsMap["bundle_galaxy"]?.oneTimePurchaseOfferDetails?.formattedPrice
+                    val finalGalaxyPrice = galaxyPrice ?: "..."
+
+                    Text(
+                        text = if (isOwnedGalaxy) "✅ Owned" else "Buy for $finalGalaxyPrice",
+                        color = Color.White
+                    )
+
+
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                // 🌈 Rainbow Dice Bundle
+                Text(
+                    text = "🌈 Rainbow Dice Bundle!",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Image(
+                    painter = painterResource(id = R.drawable.rainbow_bundle),
+                    contentDescription = "Exclusive Rainbow Dice Bundle",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    contentScale = ContentScale.Fit
+                )
+
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Description on the left
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Contains:",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("• Rainbow d6", color = Color.LightGray, fontSize = 16.sp)
+                        Text("• Rainbow d12", color = Color.LightGray, fontSize = 16.sp)
+                        Text("• Rainbow Background", color = Color.LightGray, fontSize = 16.sp)
+                    }
+
+                    // Images on the right
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_d6_rainbow_6),
+                            contentDescription = "d6 rainbow",
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Image(
+                            painter = painterResource(id = R.drawable.dice_d12_rainbow_12),
+                            contentDescription = "d12 rainbow",
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Image(
+                            painter = painterResource(id = R.drawable.bg_rainbow),
+                            contentDescription = "Rainbow BG",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+
+
+
+
+
+                val isOwnedRainbow = ownedBundles["bundle_rainbow"] == true
+
+                Button(
+                    onClick = {
+                        if (!isOwnedRainbow) {
+                            activity?.let {
+                                billingManager.launchPurchaseFlow(it, "bundle_rainbow") {
+                                    refreshTrigger.value++
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isOwnedRainbow,
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isOwnedRainbow) Color.Gray else Color(0xFFFFD700)),
+                    modifier = Modifier.fillMaxWidth(0.8f)
+                ) {
+                    val rainbowPrice = productDetailsMap["bundle_rainbow"]?.oneTimePurchaseOfferDetails?.formattedPrice
+                    val finalRainbowPrice = rainbowPrice ?: "..."
+
+                    Text(
+                        text = if (isOwnedRainbow) "✅ Owned" else "Buy for $finalRainbowPrice",
+                        color = Color.White
+                    )
+
+
+                }
+
+
+
+                Spacer(modifier = Modifier.height(6.dp)) // 🔥 Keeps close button properly aligned
+
+                // 🔹 Close Button
+                Button(
+                    onClick = {
+                        menuStack.removeLastOrNull()
+                        coroutineScope.launch {
+                            delay(120)
+                            showSettings(true)
+                        }
+                    }
+                ) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChallengeMenu(
+    menuStack: MutableList<String>,
+    coroutineScope: CoroutineScope,
+    showSettings: (Boolean) -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = {
+            menuStack.removeLastOrNull()
+            coroutineScope.launch {
+                delay(120)
+                showSettings(true)
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("🔥 Daily Challenges", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text("Coming soon...", color = Color.White)
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(onClick = {
+                menuStack.removeLastOrNull()
+                coroutineScope.launch {
+                    delay(120)
+                    showSettings(true)
+                }
+            }) {
+                Text("Close")
+            }
+        }
+    }
+}
+
+
+
+fun getDiceIcon(context: Context, diceType: Int, isSkinSelection: Boolean = false): Int {
+    val resourceName = if (isSkinSelection) {
+        when (diceType) {
+            2 -> "dice_d2_red_2"
+            4 -> "dice_d4_red_4"
+            6 -> "dice_d6_red_6"
+            8 -> "dice_d8_red_8"
+            10 -> "dice_d10_red_10"
+            12 -> "dice_d12_red_12"
+            20 -> "dice_d20_red_20"
+            else -> "dice_d6_icon" // Default fallback for unknown dice types
+        }
+    } else {
+        "dice_d${diceType}_icon"
+    }
+
+    val resId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
+    return if (resId != 0) resId else R.drawable.dice_d6_icon // Default fallback
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChallengeMenu(
+    menuStack: MutableList<String>,
+    coroutineScope: CoroutineScope,
+    showSettings: (Boolean) -> Unit,
+    challenges: List<DailyChallenge>,
+    isLoggedIn: Boolean,
+    context: Context
+) {
+    ModalBottomSheet(
+        onDismissRequest = {
+            menuStack.removeLastOrNull()
+            coroutineScope.launch {
+                delay(120)
+                showSettings(true)
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "🔥 Daily & Hot Challenges",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color(0xFFEEEEEE)
+            )
+
+
+            challenges.forEach { challenge ->
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            challenge.title,
+                            color = when (challenge.difficulty) {
+                                Difficulty.HARD -> Color(0xFFFFC107)
+                                Difficulty.MEDIUM -> Color(0xFFBBDEFB)
+                                Difficulty.REGULAR -> Color.White
+                            },
+                            style = when (challenge.difficulty) {
+                                Difficulty.HARD -> MaterialTheme.typography.titleLarge
+                                Difficulty.MEDIUM -> MaterialTheme.typography.titleMedium
+                                Difficulty.REGULAR -> MaterialTheme.typography.bodyLarge
+                            }
+                        )
+                    },
+                    supportingContent = { Text(challenge.description) },
+                    trailingContent = {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                if (challenge.isCompleted.value) "✅ Done" else "❌ Incomplete",
+                                color = if (challenge.isCompleted.value) Color.Green else Color.Red
+                            )
+                            Switch(
+                                checked = challenge.isActive.value,
+                                onCheckedChange = { checked ->
+                                    if (!isLoggedIn) {
+                                        Toast.makeText(context, "⚠️ Login required to activate challenges", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        if (!challenge.isCompleted.value && checked) {
+                                            challenges.forEach { it.isActive.value = false }
+                                            challenge.isActive.value = true
+                                        } else if (!checked) {
+                                            challenge.isActive.value = false
+                                        }
+                                    }
+                                }
+
+                                ,
+                                enabled = !challenge.isCompleted.value
+                            )
+                        }
+                    }
+                )
+
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(onClick = {
+                menuStack.removeLastOrNull()
+                coroutineScope.launch {
+                    delay(120)
+                    showSettings(true)
+                }
+            }) {
+                Text("Close")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PremiumMenu(
+    menuStack: MutableList<String>,
+    coroutineScope: CoroutineScope,
+    billingManager: BillingManager,
+    showSettings: (Boolean) -> Unit,
+    refreshTrigger: MutableState<Int>,
+    productDetailsMap: Map<String, ProductDetails>
+) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val isPremium = remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        AppSettingsManager.hasPremiumFlow(context).collect {
+            isPremium.value = it
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = {
+            menuStack.removeAll { it == "premium" }
+            coroutineScope.launch {
+                delay(120)
+                showSettings(true)
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text("⭐", fontSize = 26.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Premium", style = MaterialTheme.typography.headlineSmall)
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                text = "• Remove all ads\n• Unlock the iconic d6 Black and d6 White\n• Support the developer",
+                style = MaterialTheme.typography.bodyLarge,
+                lineHeight = 22.sp,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            Image(
+                painter = painterResource(id = R.drawable.ic_premium_ads_removed),
+                contentDescription = "No Ads",
+                modifier = Modifier.size(72.dp)
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.dice_d6_white_6),
+                    contentDescription = "White d6",
+                    modifier = Modifier.size(64.dp)
+                )
+                Image(
+                    painter = painterResource(id = R.drawable.dice_d6_black_6),
+                    contentDescription = "Black d6",
+                    modifier = Modifier.size(64.dp)
+                )
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            Button(
+                onClick = {
+                    if (!isPremium.value) {
+                        activity?.let {
+                            billingManager.launchPurchaseFlow(it, "premium_access") {
+                                Toast.makeText(context, "🎉 Premium Unlocked!", Toast.LENGTH_SHORT).show()
+                                refreshTrigger.value++ // 🔁 Refresh state
+                            }
+                        }
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = if (isPremium.value) Color.Gray else Color(0xFF000000)),
+                enabled = !isPremium.value,
+                modifier = Modifier.fillMaxWidth(0.8f)
+            ) {
+                val premiumPrice = productDetailsMap["premium_access"]?.oneTimePurchaseOfferDetails?.formattedPrice
+                val finalPremiumPrice = premiumPrice ?: "..."
+
+                Text(
+                    text = if (isPremium.value) "✅ You own Premium" else "Buy for $finalPremiumPrice",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+
+
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    menuStack.removeAll { it == "premium" }
+                    coroutineScope.launch {
+                        delay(120)
+                        showSettings(true)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(0.5f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD0BCFF))
+            ) {
+                Text("Close")
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+@Preview(showBackground = true)
+@Composable
+fun DefaultPreview() {
+    val dummyManager = BillingManager(context = LocalContext.current, userId = "preview_user")
+    DiceRollerAppTheme {
+        DiceRollerScreen(
+            billingManager = dummyManager,
+            seed = getCurrentDaySeed(),
+            isLoggedIn = false,
+            onLoginClick = {},
+            onLogoutClick = {},
+            showWelcomeMessage = true,
+            username = "PreviewUser",
+            onDismissWelcome = {},
+            selectedDieType = 6, // ✅ preview using d6
+            modifier = Modifier,
+            productDetailsMap = emptyMap()
+
+        )
+    }
+}

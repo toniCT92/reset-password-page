@@ -1,0 +1,109 @@
+🧪 TESTING BILLING ON GOOGLE PLAY
+✅ STEP 1: Upload Your App to Play Console
+Go to: play.google.com/console
+
+Select your app or create one.
+
+In the left menu, go to "Release > Testing > Internal Testing".
+
+Click Create new release.
+
+Upload your signed .aab or .apk (built via Android Studio → Build → Bundle/APK).
+
+Complete the form and click Save → then Review release → then Start rollout to internal testing.
+
+⚠️ You must release the app to test billing — side-loaded builds won’t work.
+
+✅ STEP 2: Add License Test Accounts
+In the left menu, go to Setup > License testing.
+
+In the License testing section, under License testers, add your Google account email(s) (the one on your test device).
+
+Click Save.
+
+🧪 This ensures your account can make free test purchases.
+
+✅ STEP 3: Publish In-App Products
+Go to Monetize > Products > In-app products.
+
+Click Add product.
+
+Use the same product IDs from your code (premium_access, bundle_gold, etc).
+
+Fill in:
+
+Title
+
+Description
+
+Price (e.g. 4.99 USD)
+
+Click Save and Activate for each product.
+
+🔄 Wait ~30 minutes for products to go live after activation.
+
+✅ STEP 4: Create Internal Testing List
+Go to Release > Testing > Internal Testing.
+
+Under Testers, click Manage testers.
+
+Add testers using their Google emails.
+
+Click Save, and copy the opt-in link.
+
+Send the link to each tester.
+
+On their phone, the tester must open the link and click “Become a Tester”.
+
+✅ STEP 5: Install the App (CORRECTLY)
+After opting in, open the Play Store on your test device.
+
+Search for your app — it will show up as Internal Testing.
+
+Tap Install.
+
+Never install via Android Studio for billing tests.
+
+✅ STEP 6: Perform Purchase in App
+Open your app.
+
+Navigate to any section where you use billingManager.launchPurchaseFlow(...).
+
+Tap Buy button for premium_access, bundle_gold, etc.
+
+You will see a Google Play billing screen (it says "This is a test purchase").
+
+Complete the purchase using the test card.
+
+✅ STEP 7: Verify Success Behavior
+After a successful test purchase:
+
+You should see the button change from “Buy” to “Owned” or “Select”.
+
+App should trigger refreshTrigger.value++.
+
+Firestore entry should be created under:
+
+bash
+Copiază
+Editează
+/users/{userId}/purchases/{purchaseId}
+Premium/owned states should persist after restarting the app.
+
+✅ STEP 8: Test Refund / Restore
+In Play Console > Order Management, issue a refund (optional).
+
+Restart the app to see if premium access is removed.
+
+✅ OPTIONAL: Use Static Test IDs
+You can hardcode these in your dev build to simulate responses:
+
+Test Product ID	Behavior
+android.test.purchased	Always succeeds
+android.test.canceled	Always canceled
+android.test.refunded	Simulates refund
+
+Final Tip:
+You’re testing the entire real billing flow, just using test accounts — no charges involved.
+
+Would you like a copy of this as a downloadable checklist or doc?

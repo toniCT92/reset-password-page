@@ -1,0 +1,85 @@
+Perfect — here's how to complete Step 2 and Step 3 in your actual code:
+
+✅ STEP 2: Trigger Purchase in DiceDealsMenu
+📍 File: MainActivity.kt
+📌 Function: @Composable fun DiceDealsMenu(...)
+📌 Target: All Button(onClick = { /* No functionality yet */ })
+
+🔁 Replace those with:
+kotlin
+Copiază
+Editează
+val context = LocalContext.current
+
+Button(
+    onClick = {
+        billingManager.launchPurchaseFlow(context as Activity, "bundle_gold")
+    },
+    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+    modifier = Modifier.fillMaxWidth(0.8f)
+) {
+    Text(
+        text = "Buy for $10.00 USD",
+        color = Color.Black,
+        style = MaterialTheme.typography.bodyLarge
+    )
+}
+Do the same for:
+
+"bundle_wooden" (Wooden button)
+
+"bundle_galaxy" (Galaxy button)
+
+"bundle_rainbow" (Rainbow button)
+
+"premium_access" (Premium)
+
+✅ STEP 3: Ownership Check Before Saving Skins
+📍 File: MainActivity.kt
+📌 Function: @Composable fun DiceSkinSelectionMenu(...)
+📌 Bottom Button with "Save Skin" — replace this:
+
+kotlin
+Copiază
+Editează
+if (isSaveEnabled) {
+    selectedSkins[diceType] = selectedSkin
+    AppSettingsManager.saveSelectedSkins(context, selectedSkins)
+}
+⬇️ With this logic:
+
+kotlin
+Copiază
+Editează
+val userId = Firebase.auth.currentUser?.uid ?: return@Button
+val requiredItemId = mapSkinIdToItemId(selectedSkin) // we'll define this function
+
+userOwnsItem(userId, requiredItemId) { owns ->
+    if (owns) {
+        selectedSkins[diceType] = selectedSkin
+        AppSettingsManager.saveSelectedSkins(context, selectedSkins)
+    } else {
+        Toast.makeText(context, "🔒 You don’t own this skin. Purchase required!", Toast.LENGTH_SHORT).show()
+    }
+}
+✅ Add this helper function in the same file or PurchaseUtils.kt:
+
+kotlin
+Copiază
+Editează
+fun mapSkinIdToItemId(skinId: Int): String {
+    return when (skinId) {
+        R.drawable.dice_d2_coin_2 -> "dice_d2_coin"
+        R.drawable.dice_d2_wooden_2 -> "dice_d2_wooden"
+        R.drawable.dice_d2_moon_2 -> "dice_d2_moon"
+        R.drawable.dice_d4_galaxy_4 -> "dice_d4_galaxy"
+        R.drawable.dice_d6_coin_6 -> "dice_d6_coin"
+        R.drawable.dice_d6_wooden_6 -> "dice_d6_wooden"
+        R.drawable.dice_d6_rainbow_6 -> "dice_d6_rainbow"
+        R.drawable.dice_d6_galaxy_6 -> "dice_d6_galaxy"
+        R.drawable.dice_d12_rainbow_12 -> "dice_d12_rainbow"
+        R.drawable.dice_d6_white_6 -> "dice_d6_white"
+        R.drawable.dice_d6_black_6 -> "dice_d6_black"
+        else -> "free"
+    }
+}
