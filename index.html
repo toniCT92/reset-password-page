@@ -66,8 +66,15 @@
           body: JSON.stringify({ email, newPassword })
         });
         const data = await res.json();
-        messageDiv.textContent = data.message || "Password reset successful.";
-        messageDiv.className = "message";
+
+if (res.ok) {
+  messageDiv.textContent = data.message || "Password reset successful.";
+  messageDiv.className = "message";
+} else {
+  messageDiv.textContent = data.message || "Error resetting password.";
+  messageDiv.className = "error";
+}
+
       } catch (err) {
         messageDiv.textContent = "Error resetting password.";
         messageDiv.className = "error";
